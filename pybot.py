@@ -196,66 +196,95 @@ class return_zotero(threading.Thread):
 		tags = command.split(' ')
 
 		if '' in tags:
-			tags.remove('')	
+			tags.remove('')
+
+		#Retrieve all items in library
+		items = zot.items()
+		pdf_files = [ i for i in items if i['data']['itemType'] == 'attachment' and i['data']['title'] == 'Full Text PDF' ]
+		print('Searching %i Zotero items for:' % len(items))
+		print(tags)
 
 		if 'file' in tags:
 			dl_file = True
 			tags.remove('file')
+			if len(tags) > 1:
+				self.slack_client.api_call("chat.postMessage", channel=self.channel,
+		                          text='If you want me to grab you a PDF, please give me a single zotero key: _@catbot zotero file ZOTERO-ID_', as_user=True)
+			elif len(tags) == 1:				
+				this_item = [ f for f in pdf_files if f['data']['parentItem'].lower() == tags[0] ]
+
+				if this_item:				
+					filename = this_item[0]['data']['filename']
+					zot.dump( this_item[0]['key'] , filename )
+					with open( filename , 'rb') as f:
+						self.slack_client.api_call("files.upload", 	channels=self.channel, 
+																file = f,
+																title = filename,
+																initial_comment = ''
+																)
+					return
+				else:
+					self.slack_client.api_call("chat.postMessage", channel=self.channel,
+		                          text="Oops! I can't seem to find a PDF to the Zotero key you have given me...", as_user=True)
+					return
+
 		else:
 			dl_file = False
-
-		#Retrieve all items in library
-		items = zot.items()
-		print('Searching %i Zotero items for:' % len(items))
-		print(tags)
 
 		results = []
 
 		for e in items:
-			include = True
-			for t in tags:
+			include = []	
+			for t in tags:				
 				this_tag = False
-				try: 
-					int(t)
+				#Try/Except is important because some entries aren't articles				
+				try:
 					if t in e['data']['date']:
 						this_tag = True
+						#print('Found tag %s in %s' % ( t, e['data']['date'] ) )
+					elif t.lower() in [ a['lastName'].lower() for a in e['data']['creators']]:
+						this_tag = True	
+						#print('Found tag %s in %s' % ( t, str([ a['lastName'].lower() for a in e['data']['creators']]) ) )
+					elif t.lower() in e['data']['title'].lower():
+						this_tag = True
+						#print('Found tag %s in %s' % ( t, e['data']['title'].lower() ) )
+					elif True in [ t.lower() in a['tag'].lower() for a in e['data']['tags'] ]:
+						this_tag = True
+						#print('Found tag %s in %s (%s)' % ( t, [ a['tag'].lower() for a in e['data']['tags'] ], [ t.lower() in a['tag'].lower() for a in e['data']['tags'] ] ) )
 				except:
-					try:
-						if t.lower() in [ a['lastName'].lower() for a in e['data']['creators']]:
-							this_tag = True	
-							continue
-						if t.lower() in [ a['firstName'].lower() for a in e['data']['creators']]:
-							this_tag = True	
-							continue
-						if t.lower() in e['data']['title'].lower():
-							this_tag = True	
-							continue
-						if [ t.lower() in a['tag'].lower() for a in e['data']['tags'] ]:
-							this_tag = True	
-							continue
-					except:
-						pass
-				if this_tag == False:
-					include = False
+					pass
+				
+				#print('After:',this_tag)
+				include.append( this_tag )
 
-			if include is True:
-				results.append(e)
+			if False not in include:
+				#print(tags, include, e['data']['date'] )
+				results.append( e )
 
 		if results:
-			response = 'Here are the publications matching your criteria:\n```'		
+			response = 'Here are the publications matching your criteria:\n```'	
+			response += 'Author\tJournal\tDate\tTitle\tDOI\tUrl\t(Zotero ID)\n'	
 			for e in results:
 				try:
 					doi_url = '- http://dx.doi.org/' + e['data']['DOI']
 				except:
 					doi_url = ''
 
+				authors = [ a['lastName'] for a in e['data']['creators'] ]
+				date = e['data']['date']
+				journal = e['data']['journalAbbreviation']
+				title = e['data']['title']
+				zot_key = e['key']
+
+
 				if len(e['data']['creators']) > 2:			
-					response += '%s et al., %s (%s): %s %s\n' % ( e['data']['creators'][0]['lastName'], e['data']['journalAbbreviation'], e['data']['date'], e['data']['title'],doi_url  )
+					response += '%s et al., %s (%s): %s %s (%s)\n\n' % ( authors[0], journal, date, title , doi_url, zot_key  )
 				elif len(e['data']['creators']) == 2:			
-					response += '%s and %s, %s (%s): %s %s\n' % ( e['data']['creators'][0]['lastName'], e['data']['creators'][1]['lastName'], e['data']['journalAbbreviation'], e['data']['date'], e['data']['title'],doi_url  )
+					response += '%s and %s, %s (%s): %s %s (%s)\n\n' % ( authors[0], authors[1] , journal, date, title , doi_url, zot_key   )
 				elif len(e['data']['creators']) == 1:			
-					response += '%s, %s (%s): %s %s\n' % ( e['data']['creators'][0]['lastName'], e['data']['journalAbbreviation'], e['data']['date'], e['data']['title'],doi_url  )
-			response += '```'
+					response += '%s, %s (%s): %s %s (%s)\n\n' % ( authors[0], journal, date, title , doi_url, zot_key  )
+			response += '```\n'
+			response += 'Use _@catbot zotero file ZOTERO-ID_ if you want me to grab you the PDF!'
 		else:
 			response = 'Sorry, I could not find anything matching your criteria!'
 
@@ -291,17 +320,20 @@ class return_help(threading.Thread):
 		"""
 		print('Started new thread %i for command <%s>' % (self.id, self.command ) )
 		functions = [
-					'_review-status #skeletonID_ : give me a list of skids and I will tell you their review status',
-					'_plot #skeletonID_ : give me a list of skids to plot',
-					'_url #skeletonID_ : give me a list of skids and I will generate urls to their root nodes',
-					'_nblast #skeletonID_ : give me a single skid and let me run an nblast search',
-					'_zotero tag1 tag2 tag3_ : give me tags and I will search our Zotero group for you_',
+					'_review-status #SKID_ : give me a list of skids and I will tell you their review status',
+					'_plot #SKID_ : give me a list of skids to plot',
+					'_url #SKID_ : give me a list of skids and I will generate urls to their root nodes',
+					'_nblast #SKID_ : give me a single skid and let me run an nblast search',
+					'_zotero TAG1 TAG2 TAG3_ : give me tags and I will search our Zotero group for you_',
+					'_zotero file ZOTERO-ID_ : give me a Zotero ID and I will download the PDF for you_',
 					'_help_ : I will tell you what I am capable of'
 					]
 
 		response = 'Currently I can help you with the following commands:'
 		for f in functions:
 			response += '\n' + f
+		response += '\n skids have to start with a # (hashtag), separate multiple arguments by space'
+
 
 		if response:
 			self.slack_client.api_call("chat.postMessage", channel=self.channel,
