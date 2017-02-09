@@ -39,7 +39,7 @@ SLACK_KEY = ''
 ZOT_KEY = ''
 ZOT_GRP_ID = ''
 ```
-See [here](https://api.slack.com/bot-users) on how to set up bot_id and Slack key 
+See [here](https://api.slack.com/bot-users) on how to setup bot_id and Slack key 
 
 See [here](https://github.com/urschrei/pyzotero) on Zotero keys and grp ids.
 
