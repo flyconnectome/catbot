@@ -9,11 +9,11 @@ Python 3 Slack bot to interface with CATMAID server, NBLAST and Zotero. Based on
 5. In Slack use "@catbot help" to get a list of possible commands
 
 # Dependencies 
-[slack_client](https://github.com/slackapi/python-slackclient)
-[matplotlib](http://matplotlib.org/)
-[pymaid](https://github.com/schlegelp/pymaid)
-[tabulate](https://github.com/gregbanks/python-tabulate)
-[rpy2](https://rpy2.readthedocs.io/en/version_2.8.x/)
+[slack_client](https://github.com/slackapi/python-slackclient),
+[matplotlib](http://matplotlib.org/),
+[pymaid](https://github.com/schlegelp/pymaid),
+[tabulate](https://github.com/gregbanks/python-tabulate),
+[rpy2](https://rpy2.readthedocs.io/en/version_2.8.x/),
 [pyzotero](https://github.com/urschrei/pyzotero)
 
 # Configuration
