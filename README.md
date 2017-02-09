@@ -43,3 +43,5 @@ See [here](https://api.slack.com/bot-users) on how to setup bot_id and Slack key
 
 See [here](https://github.com/urschrei/pyzotero) on Zotero keys and grp ids.
 
+## License:
+This code is under GNU GPL V3
