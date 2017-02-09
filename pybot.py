@@ -430,7 +430,7 @@ class return_nblast( threading.Thread ):
 		cores = robjects.r('registerDoMC(8)')
 		rjson = importr('rjson')
 		
-		login = robjects.r('options(catmaid.server="%s", catmaid.authname="%s",catmaid.authpassword="%s", catmaid.token="%s")' % ( botconfig.server_url, botconfig.http_user, botconfig.http_pw, botconfig.authtoken ) )
+		login = robjects.r('options(catmaid.server="%s", catmaid.authname="%s",catmaid.authpassword="%s", catmaid.token="%s")' % ( botconfig.SERVER_URL, botconfig.HTTP_USER, botconfig.HTTP_PW, botconfig.AUTHTOKEN ) )
 		dps = robjects.r('dps<-read.neuronlistfh("http://flybrain.mrc-lmb.cam.ac.uk/si/nblast/flycircuit/dpscanon.rds",	localdir=getOption("flycircuit.datadir"))')
 		#robjects.r('remotesync(dps,download.missing = TRUE)')
 		robjects.r("options('nat.default.neuronlist'='dps')")
@@ -454,8 +454,8 @@ class return_nblast( threading.Thread ):
 						'muscore': su[1][i], 
 						'ntype': su[2][i], 
 						'glom': su[3][i], 
-						'Driver': su[4][i], 
-						'Gender': su[5][i], 
+						'Driver': su[4][i],
+						'Gender': su[5][i],
 						'n': su[6][i]
 					} )
 
@@ -465,7 +465,7 @@ class return_nblast( threading.Thread ):
 		plot3d = robjects.r( 'plot3d')
 		writeWebGL = robjects.r( 'writeWebGL' )
 		plot3d( res , hits = robjects.IntVector( range(3) ) )
-		writeWebGL( 'webGL', width = 500 )
+		writeWebGL( 'webGL', width = 1000 )
 		robjects.r('rgl.close()')
 
 		return r , s
@@ -521,7 +521,7 @@ if __name__ == '__main__':
 				print('Got a commmand in channel', channel, ':' , command ) 
 				if len(open_threads) <= botconfig.MAX_PARALLEL_REQUESTS:	
 						t = None										
-						if 'review-status' in command:
+						if 'review-status' in command:							
 							t = return_review_status(slack_client, command, channel)
 						elif 'help' in command:
 							t = return_help(slack_client, command, channel)
