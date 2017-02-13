@@ -1,5 +1,5 @@
 # catbot
-Python 3 Slack bot to interface with CATMAID server, NBLAST and Zotero. Based on [Slack's Python API](https://github.com/slackapi/python-slackclient) (see [here](https://slackapi.github.io/python-slackclient/) for documentation).
+Python 3 Slack bot to interface with [CATMAID](https://github.com/catmaid/CATMAID) server, NBLAST and Zotero. Based on [Slack's Python API](https://github.com/slackapi/python-slackclient) (see [here](https://slackapi.github.io/python-slackclient/) for documentation).
 
 # Quickstart 
 1. Download catbot.py
