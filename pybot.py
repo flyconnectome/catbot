@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 import rpy2.robjects as robjects
 from slackclient import SlackClient
 from plotneuron import plotneuron
-from pymaid import CatmaidInstance, get_review, get_3D_skeleton
+from pymaid import CatmaidInstance, get_review, get_3D_skeleton, retrieve_partners, retrieve_names
 from tabulate import tabulate
 from rpy2.robjects.packages import importr
 from pyzotero import zotero
@@ -102,7 +102,7 @@ class return_plot_neuron(threading.Thread):
 		else:		
 			self.slack_client.api_call("chat.postMessage", channel=self.channel,
 									text='Got it! Generating plot - please wait...', as_user=True)
-			fig, ax = plotneuron(skids, remote_instance)
+			fig, ax = plotneuron(skids, remote_instance, 'brain')
 			if len(skids) > 1:
 				plt.legend()
 			plt.savefig( 'renderings/neuron_plot.png', transparent = False )
@@ -120,6 +120,98 @@ class return_plot_neuron(threading.Thread):
 			self.slack_client.api_call("chat.postMessage", channel=self.channel,
 		                          text=response, as_user=True)
 		return 
+
+class return_connectivity(threading.Thread):
+	""" Class to process incoming connectivity requests
+    """
+	def __init__(self, slack_client ,command,channel):
+		try:
+			self.command = command
+			self.channel = channel
+			self.slack_client = slack_client
+			self.id = random.randint(1,99999)
+			threading.Thread.__init__(self)			           
+		except:
+			print('!Error initiating thread for',self.command)  
+
+	def join(self):
+		try:
+			threading.Thread.join(self)
+			print('Thread %i closed' % self.id )
+			return None
+		except:
+			print('!ERROR joining thread for',self.url)
+		return None
+
+	def run(self):
+		""" Returns urls for a list of neurons
+		"""		
+		skids = re.findall('#(\d+)',self.command)
+		print('Started new thread %i for command <%s>' % (self.id, self.command ) )
+
+		self.command = self.command.replace('”','"')
+
+		try:
+			thresh = int( re.search('threshold=(\d+)',self.command).group(1) )
+		except:
+			thresh = 1
+
+		try:
+			filt = re.search('filter="(.*?)"',self.command).group(1).split(',')
+			print('Filtering partners for:', filt)
+		except:
+			filt = []
+
+		if 'incoming' not in self.command and 'outgoing' not in self.command and 'upstream' not in self.command and 'downstream' not in self.command:
+			directions = ['incoming','outgoing']
+		elif 'incoming' in self.command or 'upstream' in self.command:
+			directions = ['incoming']
+		elif 'outgoing' in self.command or 'downstream' in self.command:
+			directions = ['outgoing']
+
+		if not skids:
+			response = 'Please provide skids as *#skid*! For example: _plot-neuron #957684_'
+		else:				
+			cn = retrieve_partners( skids, remote_instance , threshold = thresh)
+			neuron_names = retrieve_names( list( set( [ n for n in cn['incoming'] ] + [ n for n in cn['outgoing'] ] + skids ) ) , remote_instance )
+
+			trunc_names = {}
+			for n in neuron_names:
+				if len( neuron_names[n] ) > 25:
+					trunc_names[n] = neuron_names[n][:25] + '..'
+				else:
+					trunc_names[n] = neuron_names[n]
+
+			response = 'Here are partners of the neuron(s):\n'
+
+			for i,n in enumerate(skids):
+				response += '%i: %s - #%s\n' % ( i, neuron_names[n], n )
+
+			self.slack_client.api_call("chat.postMessage", channel=self.channel,
+		                          text=response, as_user=True)
+
+			for d in directions:		
+				response = '%s partners:\n' % d
+				table = [ [ '*Name*','*Skid*'] + [ '*' + str(i) + '*' for i in range(len(skids)) ] ]
+
+				#Order by connectivity strength
+				n_max = { n: max( [ cn[d][n]['skids'][t] for t in cn[d][n]['skids'] ] ) for n in cn[d] }
+				n_order = sorted( [ n for n in cn[d] ], key = lambda x:n_max[x], reverse = True  )
+
+				for n in n_order:
+					if filt and True not in [ t in neuron_names[n].lower() for t in filt ]:
+						continue
+
+					this_line = [ trunc_names[ n ], n ]
+					for s in skids:
+						if s in cn[ d ][n]['skids']:
+							this_line.append( cn[ d ][n]['skids'][s] )
+						else:
+							this_line.append( 0 )
+					table.append( this_line )								
+				self.slack_client.api_call("chat.postMessage", channel=self.channel, text= response + '```' + tabulate(table) + '```', as_user=True)			
+
+		return ''
 
 class return_url(threading.Thread):
 	""" Class to process incoming url to neuron request
@@ -319,21 +411,28 @@ class return_help(threading.Thread):
 	def run(self):
 		""" Lists all available commands and their syntax.
 		"""
-		print('Started new thread %i for command <%s>' % (self.id, self.command ) )
-		functions = [
-					'_review-status #SKID_ : give me a list of skids and I will tell you their review status',
-					'_plot #SKID_ : give me a list of skids to plot',
-					'_url #SKID_ : give me a list of skids and I will generate urls to their root nodes',
-					'_nblast #SKID_ : give me a single skid and let me run an nblast search',
-					'_zotero TAG1 TAG2 TAG3_ : give me tags and I will search our Zotero group for you_',
-					'_zotero file ZOTERO-ID_ : give me a Zotero ID and I will download the PDF for you_',
-					'_help_ : I will tell you what I am capable of'
-					]
+		print('Started new thread %i for command <%s>' % (self.id, self.command ) )		
+		if 'partners' in self.command:
+			response = '_partners_ returns the synaptic partners for a list of skids. You can pass me keywords to filter the list: \n'
+			response += '1. Add _incoming_ or _outgoing_ to limit results to up- or downstream partners \n'
+			response += '2. Add _filter="tag1,tag2"_ to filter results for neuron names (case-insensitive, non-intersecting)\n'
+			response += '3. Add _threshold=3_ to filter partners for a minimum number of synapses\n'		
+		else:			
+			functions = [
+						'_review-status #SKID_ : give me a list of skids and I will tell you their review status',
+						'_plot #SKID_ : give me a list of skids to plot',
+						'_url #SKID_ : give me a list of skids and I will generate urls to their root nodes',
+						'_nblast #SKID_ : give me a single skid and let me run an nblast search',
+						'_zotero TAG1 TAG2 TAG3_ : give me tags and I will search our Zotero group for you',
+						'_zotero file ZOTERO-ID_ : give me a Zotero ID and I will download the PDF for you',
+						'_partners #SKID_ : returns synaptic partners. Type _@catbot help partners_ to learn more.',
+						'_help_ : I will tell you what I am capable of'
+						]
 
-		response = 'Currently I can help you with the following commands:'
-		for f in functions:
-			response += '\n' + f
-		response += '\n skids have to start with a # (hashtag), separate multiple arguments by space'
+			response = 'Currently I can help you with the following commands:'
+			for f in functions:
+				response += '\n' + f
+			response += '\n skids have to start with a # (hashtag), separate multiple arguments by space'		
 
 
 		if response:
@@ -393,14 +492,16 @@ if __name__ == '__main__':
 				print( str( datetime.now() ), ': got a commmand in channel', channel, ':' , command ) 
 				if len(open_threads)+len(open_processes) <= botconfig.MAX_PARALLEL_REQUESTS:	
 						t = None										
-						if 'review-status' in command:							
-							t = return_review_status(slack_client, command, channel)
-						elif 'help' in command:
+						if 'help' in command:
 							t = return_help(slack_client, command, channel)
+						elif 'review-status' in command:							
+							t = return_review_status(slack_client, command, channel)						
 						elif 'plot' in command:
 							t = return_plot_neuron(slack_client, command, channel)
 						elif 'url' in command:
 							t = return_url(slack_client, command, channel)
+						elif 'partners' in command:
+							t = return_connectivity(slack_client, command, channel)
 						elif 'nblast' in command:
 							#t = return_nblast(slack_client, command, channel)
 							#For some odd reason, threading does not prevent freezing while waiting R code to return nblast results
