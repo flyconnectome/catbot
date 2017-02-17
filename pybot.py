@@ -13,7 +13,7 @@
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    along with this program. If not, see <http://www.gnu.org/licenses/>.
 """
 
 import time, re, threading, random, json, sys, subprocess
@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 import rpy2.robjects as robjects
 from slackclient import SlackClient
 from plotneuron import plotneuron
-from pymaid import CatmaidInstance, get_review, get_3D_skeleton, retrieve_partners, retrieve_names
+from pymaid import CatmaidInstance, get_review, get_3D_skeleton, retrieve_partners, retrieve_names, skid_exists
 from tabulate import tabulate
 from rpy2.robjects.packages import importr
 from pyzotero import zotero
@@ -54,6 +54,14 @@ class return_review_status(threading.Thread):
 		"""	
 		print('Started new thread %i for command <%s>' % (self.id, self.command ) )
 		skids = re.findall('#(\d+)',self.command)
+
+		for s in skids:
+			if skid_exists( s, remote_instance ) is False:
+				response = "I'm sorry - the neuron #%s does not seem to exists. Please try again." % s
+				self.slack_client.api_call("chat.postMessage", channel=self.channel,
+	                          text=response, as_user=True)
+				return
+
 		if not skids:
 			response = 'Please provide skids as *#skid*! For example: _@catbot review-status #957684_'
 		else:
@@ -100,6 +108,13 @@ class return_plot_neuron(threading.Thread):
 		if not skids:
 			response = 'Please provide skids as *#skid*! For example: _@catbot plot-neuron #957684_'
 		else:		
+			for s in skids:
+				if skid_exists( s, remote_instance ) is False:
+					response = "I'm sorry - the neuron #%s does not seem to exists. Please try again." % s
+					self.slack_client.api_call("chat.postMessage", channel=self.channel,
+		                          text=response, as_user=True)
+					return
+
 			self.slack_client.api_call("chat.postMessage", channel=self.channel,
 									text='Got it! Generating plot - please wait...', as_user=True)
 			fig, ax = plotneuron(skids, remote_instance, 'brain')
@@ -148,6 +163,13 @@ class return_connectivity(threading.Thread):
 		"""		
 		skids = re.findall('#(\d+)',self.command)
 		print('Started new thread %i for command <%s>' % (self.id, self.command ) )
+
+		for s in skids:
+			if skid_exists( s, remote_instance ) is False:
+				response = "I'm sorry - the neuron #%s does not seem to exists. Please try again." % s
+				self.slack_client.api_call("chat.postMessage", channel=self.channel,
+	                          text=response, as_user=True)
+				return
 
 		self.command = self.command.replace('”','"')
 
@@ -240,6 +262,13 @@ class return_url(threading.Thread):
 		"""		
 		skids = re.findall('#(\d+)',self.command)
 		print('Started new thread %i for command <%s>' % (self.id, self.command ) )
+
+		for s in skids:
+			if skid_exists( s, remote_instance ) is False:
+				response = "I'm sorry - the neuron #%s does not seem to exists. Please try again." % s
+				self.slack_client.api_call("chat.postMessage", channel=self.channel,
+	                          text=response, as_user=True)
+				return
 
 		if not skids:
 			response = 'Please provide skids as *#skid*! For example: _plot-neuron #957684_'
@@ -440,7 +469,7 @@ class return_help(threading.Thread):
 		                          text=response, as_user=True)
 		return 
 
-def parse_slack_output(slack_rtm_output):
+def parse_slack_output(slack_rtm_output, user_list):
     """
         The Slack Real Time Messaging API is an events firehose.
         this parsing function returns None unless a message is
@@ -451,6 +480,7 @@ def parse_slack_output(slack_rtm_output):
         for output in output_list:
             if output and 'text' in output and botconfig.AT_BOT in output['text']:
                 # return text after the @ mention, whitespace removed
+                print('Message from', [ e['name'] for e in user_list['members'] if e['id'] == output['user'] ], ':', output['text'] )
                 return output['text'].split(botconfig.AT_BOT)[1].strip().lower(), \
                        output['channel']
     return None, None
@@ -479,12 +509,16 @@ if __name__ == '__main__':
 	open_threads = []
 	open_processes = []
 	previous_open_threads = 0
+	command = channel = None
+
+	user_list = slack_client.api_call('users.list')
+	#print('Users:', user_list)
 
 	if slack_client.rtm_connect():
 		print("Pybot connected and running!")
 		while True:
 			try:
-				command, channel = parse_slack_output(slack_client.rtm_read())
+				command, channel = parse_slack_output(slack_client.rtm_read(), user_list)
 			except:
 				print('Oops - Error parsing slack output %s' % str( datetime.now() ) )
 
