@@ -544,7 +544,7 @@ if __name__ == '__main__':
 							if len(skids) == 1:								
 								if skid_exists( skids[0], remote_instance ) is False:
 										response = "I'm sorry - the neuron #%s does not seem to exists. Please try again." % skids[0]
-										self.slack_client.api_call("chat.postMessage", channel=self.channel,
+										slack_client.api_call("chat.postMessage", channel=channel,
 							                          text=response, as_user=True)
 								else:
 									slack_client.api_call("chat.postMessage", channel=channel, text='Blasting neuron %s - please wait...' % skids[0], as_user=True)
