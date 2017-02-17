@@ -541,10 +541,15 @@ if __name__ == '__main__':
 							#For some odd reason, threading does not prevent freezing while waiting R code to return nblast results
 							#Therfore nblasting is used as a fire and forget script by creating a new subprocess
 							skids = re.findall('#(\d+)', command)
-							if len(skids) == 1:
-								slack_client.api_call("chat.postMessage", channel=channel, text='Blasting neuron %s - please wait...' % skids[0], as_user=True)
-								p = subprocess.Popen("python3 ffnblast.py %s %s" % (skids[0],channel) , shell=True)
-								open_processes.append(p)
+							if len(skids) == 1:								
+								if skid_exists( skids[0], remote_instance ) is False:
+										response = "I'm sorry - the neuron #%s does not seem to exists. Please try again." % skids[0]
+										self.slack_client.api_call("chat.postMessage", channel=self.channel,
+							                          text=response, as_user=True)
+								else:
+									slack_client.api_call("chat.postMessage", channel=channel, text='Blasting neuron %s - please wait...' % skids[0], as_user=True)
+									p = subprocess.Popen("python3 ffnblast.py %s %s" % (skids[0],channel) , shell=True)
+									open_processes.append(p)
 							else:
 								slack_client.api_call("chat.postMessage", channel=channel, text='I need a single skeleton ID to nblast! E.g. #123456', as_user=True)
 						elif 'zotero' in command:
