@@ -97,7 +97,7 @@ if __name__ == '__main__':
 	print('Finished nblasting neuron', skid )
 
 	slack_client.api_call(	"chat.delete",
-										channel = self.channel,
+										channel = channel,
 										ts = ts
 										)
 
