@@ -40,6 +40,8 @@ if __name__ == '__main__':
 	slack_client = SlackClient( botconfig.SLACK_KEY )
 	#print('Connection to Slack:', slack_client.rtm_connect() )
 
+	ts = slack_client.api_call("chat.postMessage", channel=channel, text='Blasting neuron %s - please wait...' % skid, as_user=True)['ts']
+
 	#Import R libraries
 	elmr = importr('elmr')
 	fc = importr('flycircuit')		
@@ -93,6 +95,11 @@ if __name__ == '__main__':
 	robjects.r('rgl.close()')
 
 	print('Finished nblasting neuron', skid )
+
+	slack_client.api_call(	"chat.delete",
+										channel = self.channel,
+										ts = ts
+										)
 
 	table = [ ['*Name*','*Score*','*MuScore*','*Driver*','*Gender*' ] ]	
 

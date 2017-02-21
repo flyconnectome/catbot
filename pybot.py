@@ -115,12 +115,18 @@ class return_plot_neuron(threading.Thread):
 		                          text=response, as_user=True)
 					return
 
-			self.slack_client.api_call("chat.postMessage", channel=self.channel,
-									text='Got it! Generating plot - please wait...', as_user=True)
+			ts = self.slack_client.api_call("chat.postMessage", channel=self.channel,
+									text='Got it! Generating plot - please wait...', as_user=True)['ts']
+
 			fig, ax = plotneuron(skids, remote_instance, 'brain')
 			if len(skids) > 1:
 				plt.legend()
 			plt.savefig( 'renderings/neuron_plot.png', transparent = False )
+
+			self.slack_client.api_call(	"chat.delete",
+										channel = self.channel,
+										ts = ts
+										)
 
 			with open('renderings/neuron_plot.png', 'rb') as f:
 				self.slack_client.api_call("files.upload", 	channels=self.channel, 
@@ -320,11 +326,19 @@ class return_zotero(threading.Thread):
 		if '' in tags:
 			tags.remove('')
 
+		ts = self.slack_client.api_call("chat.postMessage", channel=self.channel,
+		                          text='Searching Zotero database. Please hold...', as_user=True)['ts']
+
 		#Retrieve all items in library
-		items = zot.items()
+		items = zot.everything ( zot.items() )
 		pdf_files = [ i for i in items if i['data']['itemType'] == 'attachment' and i['data']['title'] == 'Full Text PDF' ]
 		print('Searching %i Zotero items for:' % len(items))
 		print(tags)
+
+		self.slack_client.api_call(	"chat.delete",
+										channel = self.channel,
+										ts = ts
+										)
 
 		if 'file' in tags:
 			dl_file = True
@@ -332,7 +346,7 @@ class return_zotero(threading.Thread):
 			if len(tags) > 1:
 				self.slack_client.api_call("chat.postMessage", channel=self.channel,
 		                          text='If you want me to grab you a PDF, please give me a single zotero key: _@catbot zotero file ZOTERO-ID_', as_user=True)
-			elif len(tags) == 1:				
+			elif len(tags) == 1:
 				this_item = [ f for f in pdf_files if f['data']['parentItem'].lower() == tags[0] ]
 
 				if this_item:				
@@ -546,8 +560,7 @@ if __name__ == '__main__':
 										response = "I'm sorry - the neuron #%s does not seem to exists. Please try again." % skids[0]
 										slack_client.api_call("chat.postMessage", channel=channel,
 							                          text=response, as_user=True)
-								else:
-									slack_client.api_call("chat.postMessage", channel=channel, text='Blasting neuron %s - please wait...' % skids[0], as_user=True)
+								else:									
 									p = subprocess.Popen("python3 ffnblast.py %s %s" % (skids[0],channel) , shell=True)
 									open_processes.append(p)
 							else:
