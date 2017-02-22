@@ -460,12 +460,16 @@ class return_help(threading.Thread):
 			response += '1. Add _incoming_ or _outgoing_ to limit results to up- or downstream partners \n'
 			response += '2. Add _filter="tag1,tag2"_ to filter results for neuron names (case-insensitive, non-intersecting)\n'
 			response += '3. Add _threshold=3_ to filter partners for a minimum number of synapses\n'		
+		elif 'nblast' in self.command:
+			response = '_pnblast_ blasts the provided neuron against the flycircuit database. Use the following optional arguments to refine: \n'
+			response += '1. Use _nomirror_ to prevent mirroring of neurons before nblasting (i.e. if cellbody is already on the flys left). \n'
+			response += '2. Use _hits=N_ to return the top N hits in the 3D plot. Default is 3\n'		
 		else:			
 			functions = [
 						'_review-status #SKID_ : give me a list of skids and I will tell you their review status',
 						'_plot #SKID_ : give me a list of skids to plot',
 						'_url #SKID_ : give me a list of skids and I will generate urls to their root nodes',
-						'_nblast #SKID_ : give me a single skid and let me run an nblast search',
+						'_nblast #SKID_ : give me a single skid and let me run an nblast search. Type _@catbot help nblast_ to learn more.',
 						'_zotero TAG1 TAG2 TAG3_ : give me tags and I will search our Zotero group for you',
 						'_zotero file ZOTERO-ID_ : give me a Zotero ID and I will download the PDF for you',
 						'_partners #SKID_ : returns synaptic partners. Type _@catbot help partners_ to learn more.',
@@ -475,8 +479,7 @@ class return_help(threading.Thread):
 			response = 'Currently I can help you with the following commands:'
 			for f in functions:
 				response += '\n' + f
-			response += '\n skids have to start with a # (hashtag), separate multiple arguments by space'		
-
+			response += '\n skids have to start with a # (hashtag), separate multiple arguments by space'
 
 		if response:
 			self.slack_client.api_call("chat.postMessage", channel=self.channel,
@@ -560,8 +563,14 @@ if __name__ == '__main__':
 										response = "I'm sorry - the neuron #%s does not seem to exists. Please try again." % skids[0]
 										slack_client.api_call("chat.postMessage", channel=channel,
 							                          text=response, as_user=True)
-								else:									
-									p = subprocess.Popen("python3 ffnblast.py %s %s" % (skids[0],channel) , shell=True)
+								else:										
+									mirror = not 'nomirror' in command
+									try:
+										hits = int ( re.search('hits=(\d+)').group(1) )
+									except:
+										hits = 3
+
+									p = subprocess.Popen("python3 ffnblast.py %s %s" % (skids[0],channel, mirror, hits ) , shell=True)
 									open_processes.append(p)
 							else:
 								slack_client.api_call("chat.postMessage", channel=channel, text='I need a single skeleton ID to nblast! E.g. #123456', as_user=True)

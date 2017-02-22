@@ -33,7 +33,8 @@ if __name__ == '__main__':
 	#Skid of the neuron to NBLAST and Slack channel to post the response to have to be passed as arguments
 	skid = sys.argv[1] 
 	channel = sys.argv[2]
-	mirror = True 
+	mirror = sys.argv[3]
+	hits = sys.argv[4]
 	reverse = False
 
 	#Initialize slack client from botconfig.py
@@ -90,7 +91,7 @@ if __name__ == '__main__':
 	#Generate a 3d html from the results
 	plot3d = robjects.r( 'plot3d')
 	writeWebGL = robjects.r( 'writeWebGL' )
-	plot3d( res , hits = robjects.IntVector( range(3) ) )
+	plot3d( res , hits = robjects.IntVector( range( hits + 1 ) ) )
 	writeWebGL( 'webGL', width = 1000 )
 	robjects.r('rgl.close()')
 
