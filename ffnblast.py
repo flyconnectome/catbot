@@ -33,15 +33,17 @@ if __name__ == '__main__':
 	#Skid of the neuron to NBLAST and Slack channel to post the response to have to be passed as arguments
 	skid = sys.argv[1] 
 	channel = sys.argv[2]
-	mirror = sys.argv[3]
-	hits = sys.argv[4]
+	mirror = bool(sys.argv[3])
+	hits = int(sys.argv[4])
 	reverse = False
 
 	#Initialize slack client from botconfig.py
 	slack_client = SlackClient( botconfig.SLACK_KEY )
 	#print('Connection to Slack:', slack_client.rtm_connect() )
 
-	ts = slack_client.api_call("chat.postMessage", channel=channel, text='Blasting neuron %s - please wait...' % skid, as_user=True)['ts']
+	print( 'Blasting neuron %s ( mirror=%s; reverse=%s; hits=%i ) - please wait...' % ( skid, mirror, reverse, hits ) )
+
+	ts = slack_client.api_call("chat.postMessage", channel=channel, text='Blasting neuron %s ( mirror=%s; reverse=%s; hits=%i ) - please wait...' % ( skid, mirror, reverse, hits ) , as_user=True)['ts']
 
 	#Import R libraries
 	elmr = importr('elmr')

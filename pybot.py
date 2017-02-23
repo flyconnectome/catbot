@@ -767,7 +767,7 @@ if __name__ == '__main__':
 									except:
 										hits = 3
 
-									p = subprocess.Popen("python3 ffnblast.py %s %s %s %s" % ( skids[0], channel, mirror, hits ) , shell=True)
+									p = subprocess.Popen("python3 ffnblast.py %s %s %s %i" % ( skids[0], channel, mirror, hits ) , shell=True)
 									open_processes.append(p)
 							else:
 								slack_client.api_call("chat.postMessage", channel=channel, text='I need a single skeleton ID to nblast! E.g. #123456', as_user=True)
