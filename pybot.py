@@ -16,7 +16,7 @@
     along with this program. If not, see <http://www.gnu.org/licenses/>.
 """
 
-import time, re, threading, random, json, sys, subprocess
+import time, re, threading, random, json, sys, subprocess, shelve
 import matplotlib.pyplot as plt
 import rpy2.robjects as robjects
 from slackclient import SlackClient
@@ -25,14 +25,14 @@ from pymaid import CatmaidInstance, get_review, get_3D_skeleton, retrieve_partne
 from tabulate import tabulate
 from rpy2.robjects.packages import importr
 from pyzotero import zotero
-from datetime import datetime
+from datetime import datetime, date
 
 class return_review_status(threading.Thread):
 	""" Class to process incoming review-status request
     """
 	def __init__(self, slack_client ,command,channel):
 		try:
-			self.command = command
+			self.command = command.lower()
 			self.channel = channel
 			self.slack_client = slack_client
 			self.id = random.randint(1,99999)
@@ -82,7 +82,7 @@ class return_plot_neuron(threading.Thread):
     """
 	def __init__(self, slack_client ,command,channel):
 		try:
-			self.command = command
+			self.command = command.lower()
 			self.channel = channel
 			self.slack_client = slack_client
 			self.id = random.randint(1,99999)
@@ -147,7 +147,7 @@ class return_connectivity(threading.Thread):
     """
 	def __init__(self, slack_client ,command,channel):
 		try:
-			self.command = command
+			self.command = command.lower()
 			self.channel = channel
 			self.slack_client = slack_client
 			self.id = random.randint(1,99999)
@@ -246,7 +246,7 @@ class return_url(threading.Thread):
     """
 	def __init__(self, slack_client ,command,channel):
 		try:
-			self.command = command
+			self.command = command.lower()
 			self.channel = channel
 			self.slack_client = slack_client
 			self.id = random.randint(1,99999)
@@ -297,7 +297,7 @@ class return_zotero(threading.Thread):
 	"""
 	def __init__(self, slack_client ,command,channel):
 		try:
-			self.command = command
+			self.command = command.lower()
 			self.channel = channel
 			self.slack_client = slack_client
 			self.id = random.randint(1,99999)
@@ -434,7 +434,7 @@ class return_help(threading.Thread):
     """
 	def __init__(self, slack_client ,command,channel):
 		try:
-			self.command = command
+			self.command = command.lower()
 			self.channel = channel
 			self.slack_client = slack_client
 			self.id = random.randint(1,99999)
@@ -461,18 +461,27 @@ class return_help(threading.Thread):
 			response += '2. Add _filter="tag1,tag2"_ to filter results for neuron names (case-insensitive, non-intersecting)\n'
 			response += '3. Add _threshold=3_ to filter partners for a minimum number of synapses\n'		
 		elif 'nblast' in self.command:
-			response = '_pnblast_ blasts the provided neuron against the flycircuit database. Use the following optional arguments to refine: \n'
-			response += '1. Use _nomirror_ to prevent mirroring of neurons before nblasting (i.e. if cellbody is already on the flys left). \n'
-			response += '2. Use _hits=N_ to return the top N hits in the 3D plot. Default is 3\n'		
+			response = '_nblast_ blasts the provided neuron against the flycircuit database. Use the following optional arguments to refine: \n'
+			response += '1. Use _nblast #skid nomirror_ to prevent mirroring of neurons before nblasting (i.e. if cellbody is already on the flys left). \n'
+			response += '2. Use _nblast #skid hits=N_ to return the top N hits in the 3D plot. Default is 3\n'		
+		elif 'neurondb' in self.command:
+			response = '_neurondb_ lets you access and edit the neuron database. \n'
+			response += '1. Use _neurondb list_ to get a list of all neurons in the database. \n'
+			response += '2. Use _neurondb search tag1 tag2 tag3_ to search for hits in the database. \n'			
+			response += '3. Use _neurondb show #skid1 #skid2_ to show a summary for those skeleton ids. \n'
+			response += '4. Use _neurondb edit #skid name="MVP2" comments="awesome neuron"_ to edit entries. \n'
+			response += '   For list entries such as <comments> or <neuropils> you can use "comments=comment1;comment2;comment3" to add multiple entries at a time. \n'
+			response += '5. To delete specific comments/tags use e.g. _neurondb delete comments=1_ to remove the first comment. \n'
 		else:			
 			functions = [
 						'_review-status #SKID_ : give me a list of skids and I will tell you their review status',
 						'_plot #SKID_ : give me a list of skids to plot',
 						'_url #SKID_ : give me a list of skids and I will generate urls to their root nodes',
-						'_nblast #SKID_ : give me a single skid and let me run an nblast search. Type _@catbot help nblast_ to learn more.',
+						'_nblast #SKID_ : give me a single skid and let me run an nblast search. Use _@catbot help nblast_ to learn more.',
 						'_zotero TAG1 TAG2 TAG3_ : give me tags and I will search our Zotero group for you',
 						'_zotero file ZOTERO-ID_ : give me a Zotero ID and I will download the PDF for you',
-						'_partners #SKID_ : returns synaptic partners. Type _@catbot help partners_ to learn more.',
+						'_partners #SKID_ : returns synaptic partners. Use _@catbot help partners_ to learn more.',
+						'_neurondb_ : accesses the neuron database. Use _@catbot help neurondb_ to learn more. .',
 						'_help_ : I will tell you what I am capable of'
 						]
 
@@ -484,6 +493,188 @@ class return_help(threading.Thread):
 		if response:
 			self.slack_client.api_call("chat.postMessage", channel=self.channel,
 		                          text=response, as_user=True)
+		return 
+
+class return_shelve(threading.Thread):
+	""" Class to process incoming help request
+    """
+	def __init__(self, slack_client, command, channel, user):
+		try:
+			self.command = command
+			self.channel = channel
+			self.user = user
+			self.slack_client = slack_client
+			self.id = random.randint(1,99999)
+			threading.Thread.__init__(self)			           
+		except:
+			print('!Error initiating thread for',self.command)  
+
+	def join(self):
+		try:
+			threading.Thread.join(self)
+			print('Thread %i closed' % self.id )
+			return None
+		except:
+			print('!ERROR joining thread for',self.url)
+		return None		
+
+	def delete_value(self, neuron ):
+		""" Generates a new entry for a given skid
+		"""
+		for e in self.entries:
+			try:
+				index_to_delete = int ( re.search( e + '=(\d+)', self.command ).group(1) ) - 1
+				neuron[e].pop( index_to_delete )
+			except:
+				pass
+
+		neuron['last_edited'] = str(date.today())
+
+		return neuron
+
+	def edit_entry(self, neuron ):
+		""" Generates a new entry for a given skid
+		"""
+		for e in self.entries:
+			try:
+				new_value = re.search( e + '="(.*?)"', self.command ).group(1)
+
+				if type( neuron[e] ) == type( list() ):					
+					neuron[ e ] += [ v + ' (' + self.user + ')' for v in new_value.split(';') ]					
+				else:
+					neuron[ e ] = new_value
+			except:
+				pass
+
+		neuron['last_edited'] = str(date.today())
+
+		return neuron
+
+
+	def plot_results(self, neuron):
+		""" Returns summary of neuron as string ready for posting
+		"""
+
+		table = []
+		for k in self.entries:
+			if type(neuron[k]) != type ( list() ):
+				table.append ( [ k.capitalize(), str( neuron[k] ) ] )				
+			elif k == 'comments':				
+				for i , e in enumerate( neuron[k] ):
+					if i == 0:						
+						table.append ( [ k.capitalize(), e ] )
+					else:
+						table.append ( [ '' , e ] )
+			else:
+				table.append ( [ k.capitalize(), "; ".join( neuron[k] ) ] )
+		
+		return '```' + tabulate(table) + '```\n'
+
+	def run(self):
+		""" Opens neuron database, returns/edits entries.
+		"""
+
+		#Define entries here!
+		self.entries = ['name','catmaid_name','skid','alternative_names','type','neuropils','status','tags','last_edited','comments']				
+
+		skids = re.findall('#(\d+)', self.command.lower())
+
+		if skids:
+			self.neuron_names = retrieve_names( skids, remote_instance )
+
+		try:
+			data = shelve.open('neurondb')
+		except:
+			self.slack_client.api_call("chat.postMessage", channel=self.channel,
+		                          text='Unable to open neuron database!', as_user=True)
+			return		
+
+		if 'list' in self.command.lower():			
+			response = 'I have these neurons in my database:\n'
+			response += '```' + tabulate( [ ['*Name*','*Skid*' ] ] + [ [ data[k]['name'], k ] for k in data.keys() ] ) + '```'
+
+		elif 'show' in self.command.lower():			
+			if not skids:
+				response = 'Sorry, I need at least a single #skid.'
+			else:
+				response = ''
+				for s in skids:
+					if s in data:
+						response += self.plot_results( data[s] )
+					else:
+						response += 'Sorry, I did not find skid #%s in my database!' % s  
+
+		elif 'search' in self.command.lower():
+			#First extract tags to search for
+			search = self.command.lower().replace('neurondb', '')
+			tags = search.split(' ')
+			if '' in tags:
+				tags.remove('')
+
+			hits = set()
+			for n in data.keys():				
+				for t in tags:
+					if [ t in data[n][entry].lower() for entry in data[n] if type( data[n][entry] ) != type ( list() ) ]:
+						hits.add(n)
+						break
+					else:
+						for entry in [ e for e in data[n] if type( data[n][entry] != type ( list() ) ) ]:
+							if [ t in data[n][entry][e].lower() for e in data[n][entry] ]:
+								hits.add(n)
+								break
+
+			if hits:				
+				response = 'I found the following match(es):\n'
+				response += '```' + tabulate( [ [ '*Name*', '*Skid*' ] ] + [ [ data[n]['name'], n ] for n in hits ] ) +'```'
+			else:
+				response = 'Sorry, could not find anything matching your query!'
+
+		elif 'edit' in self.command.lower():
+			if len(skids) != 1:
+				response = 'Please give me a *single* skid: e.g. _@catbot new #435678_'
+			else:
+				if skids[0] not in data:
+					if skids[0] in self.neuron_names:						
+						self.slack_client.api_call("chat.postMessage", channel=self.channel,
+			                          text='Neuron #%s not in my database - created a new entry!' % ( skids[0] ), as_user=True)
+
+						data[ skids[0] ] = { 	'name': '',
+												'catmaid_name': self.neuron_names [ skids[0] ] ,
+												'skid' : skids[0] ,
+												'alternative_names' : [] ,
+												'type' : '',
+												'neuropils' : [],
+												'status' : 'unknown',
+												'tags' : '',
+												'last_edited' : str(date.today()) ,
+												'comments': []
+											}				
+					else:						
+						self.slack_client.api_call("chat.postMessage", channel=self.channel,
+			                          text='Could not find neuron #%s in my database or in CATMAID!' % ( skids[0] )	, as_user=True)	
+				
+				data[ skids[0] ] = self.edit_entry( data[ skids[0] ] )
+				response = 'Updated entry for neuron %s #%s!' % ( data[ skids[0] ]['name'], skids[0] )
+		elif 'delete' in self.command.lower():
+			if len(skids) != 1:
+				response = 'Please give me a *single* skid: e.g. _@catbot new #435678_'
+			elif skids[0] not in data:
+				response = 'Could not find neuron #%s in my database.' % ( skids[0] )
+			else:
+				data[ skids[0] ] = self.delete_value( data[ skids[0] ] )
+				response = 'Updated entry for neuron %s #%s!' % ( data[ skids[0] ]['name'], skids[0] )
+
+		else: 
+			response = 'Not quite sure what you want me to do with the neurondb. Please use _@catbot help neurondb_'
+
+		try:
+			data.close()
+			self.slack_client.api_call("chat.postMessage", channel=self.channel,
+			                          text=response, as_user=True)
+		except:
+			self.slack_client.api_call("chat.postMessage", channel=self.channel,
+			                          text='Oops! Something went wrong. If you made any changes to the database please try again.', as_user=True)
+		
 		return 
 
 def parse_slack_output(slack_rtm_output, user_list):
@@ -498,9 +689,10 @@ def parse_slack_output(slack_rtm_output, user_list):
             if output and 'text' in output and botconfig.AT_BOT in output['text']:
                 # return text after the @ mention, whitespace removed
                 print('Message from', [ e['name'] for e in user_list['members'] if e['id'] == output['user'] ], ':', output['text'] )
-                return output['text'].split(botconfig.AT_BOT)[1].strip().lower(), \
-                       output['channel']
-    return None, None
+                return output['text'].split(botconfig.AT_BOT)[1].strip(), \
+                       output['channel'], \
+                       [ e['name'] for e in user_list['members'] if e['id'] == output['user'] ][0]                       
+    return None, None, None
 
 
 if __name__ == '__main__':
@@ -535,25 +727,30 @@ if __name__ == '__main__':
 		print("Pybot connected and running!")
 		while True:
 			try:
-				command, channel = parse_slack_output(slack_client.rtm_read(), user_list)
+				command, channel, user = parse_slack_output( slack_client.rtm_read(), user_list )
 			except:
 				print('Oops - Error parsing slack output %s' % str( datetime.now() ) )
 
 			if command and channel:
+				#Replace odd ” with "
+				command = command.replace( '”' , '"' )
+
 				print( str( datetime.now() ), ': got a commmand in channel', channel, ':' , command ) 
 				if len(open_threads)+len(open_processes) <= botconfig.MAX_PARALLEL_REQUESTS:	
 						t = None										
-						if 'help' in command:
+						if 'help' in command.lower():
 							t = return_help(slack_client, command, channel)
-						elif 'review-status' in command:							
+						elif 'review-status' in command.lower():							
 							t = return_review_status(slack_client, command, channel)						
-						elif 'plot' in command:
+						elif 'plot' in command.lower():
 							t = return_plot_neuron(slack_client, command, channel)
-						elif 'url' in command:
+						elif 'url' in command.lower():
 							t = return_url(slack_client, command, channel)
-						elif 'partners' in command:
+						elif 'partners' in command.lower():
 							t = return_connectivity(slack_client, command, channel)
-						elif 'nblast' in command:
+						elif 'neurondb' in command.lower():
+							t = return_shelve(slack_client, command, channel, user)
+						elif 'nblast' in command.lower():
 							#t = return_nblast(slack_client, command, channel)
 							#For some odd reason, threading does not prevent freezing while waiting R code to return nblast results
 							#Therfore nblasting is used as a fire and forget script by creating a new subprocess
@@ -566,7 +763,7 @@ if __name__ == '__main__':
 								else:										
 									mirror = not 'nomirror' in command
 									try:
-										hits = int ( re.search('hits=(\d+)').group(1) )
+										hits = int ( re.search('hits=(\d+)', command ).group(1) )
 									except:
 										hits = 3
 
@@ -574,7 +771,7 @@ if __name__ == '__main__':
 									open_processes.append(p)
 							else:
 								slack_client.api_call("chat.postMessage", channel=channel, text='I need a single skeleton ID to nblast! E.g. #123456', as_user=True)
-						elif 'zotero' in command:
+						elif 'zotero' in command.lower():
 							if zot:
 								t = return_zotero(slack_client, command, channel)
 							else:
