@@ -43,5 +43,16 @@ See [here](https://api.slack.com/bot-users) on how to setup bot_id and Slack key
 
 See [here](https://github.com/urschrei/pyzotero) on Zotero keys and grp ids.
 
+# Using catbot to NBLAST
+Use `@catbot nblast #skid` to have catbot perform a nblast search. This relies on R being installed and configured to use [elmr](https://github.com/jefferis/elmr) and its dependencies.
+
+Catbot will return a list of top hits and their nblast scores, and a .html file containing a WebGL rendering of the first few hits (see screenshot).
+
+![nblast_example](https://cloud.githubusercontent.com/assets/7161148/23308336/ce5682be-faa2-11e6-9400-6bdb369f1b15.png)
+
+Optional arguments:
+`nomirror` to set mirror=F (default = T)
+`hits=N` to set number of hits to include in the 3D WebGL file (default = 3)
+
 ## License:
 This code is under GNU GPL V3
