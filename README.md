@@ -6,7 +6,7 @@ Python 3 Slack bot to interface with [CATMAID](https://github.com/catmaid/CATMAI
 2. Setup and configure botconfig.py (see below)
 3. Install dependencies
 4. Run catbot.py
-5. In Slack use "@catbot help" to get a list of possible commands
+5. In Slack use `@catbot help` to get a list of possible commands
 
 # Dependencies 
 [slack_client](https://github.com/slackapi/python-slackclient),
