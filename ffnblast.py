@@ -33,17 +33,18 @@ if __name__ == '__main__':
 	#Skid of the neuron to NBLAST and Slack channel to post the response to have to be passed as arguments
 	skid = sys.argv[1] 
 	channel = sys.argv[2]
-	mirror = bool(sys.argv[3])
+	mirror = bool( int( sys.argv[3]) )
 	hits = int(sys.argv[4])
+	db = sys.argv[5]
 	reverse = False
 
 	#Initialize slack client from botconfig.py
 	slack_client = SlackClient( botconfig.SLACK_KEY )
 	#print('Connection to Slack:', slack_client.rtm_connect() )
 
-	print( 'Blasting neuron %s ( mirror=%s; reverse=%s; hits=%i ) - please wait...' % ( skid, mirror, reverse, hits ) )
+	print( 'Blasting neuron %s ( mirror=%s; reverse=%s; hits=%i; db=%s ) - please wait...' % ( skid, mirror, reverse, hits, db ) )
 
-	ts = slack_client.api_call("chat.postMessage", channel=channel, text='Blasting neuron %s ( mirror=%s; reverse=%s; hits=%i ) - please wait...' % ( skid, mirror, reverse, hits ) , as_user=True)['ts']
+	ts = slack_client.api_call("chat.postMessage", channel=channel, text='Blasting neuron %s ( mirror=%s; reverse=%s; hits=%i, db=%s ) - please wait...' % ( skid, mirror, reverse, hits, db ) , as_user=True)['ts']
 
 	#Import R libraries
 	elmr = importr('elmr')
@@ -54,9 +55,15 @@ if __name__ == '__main__':
 
 	#Make sure variables for databases are set correctly
 	login = robjects.r('options(catmaid.server="%s", catmaid.authname="%s",catmaid.authpassword="%s", catmaid.token="%s")' % ( botconfig.SERVER_URL, botconfig.HTTP_USER, botconfig.HTTP_PW, botconfig.AUTHTOKEN ) )
-	dps = robjects.r('dps<-read.neuronlistfh("http://flybrain.mrc-lmb.cam.ac.uk/si/nblast/flycircuit/dpscanon.rds",	localdir=getOption("flycircuit.datadir"))')
+	fcdps = robjects.r('fcdps<-read.neuronlistfh("%s",	localdir=getOption("flycircuit.datadir"))' % botconfig.FLYCIRCUIT_DB ) 
+	gmrdps = robjects.r('gmrdps<-read.neuronlistfh("%s",	localdir=getOption("flycircuit.datadir"))' % botconfig.JANELIA_GMR_DB )  
 	#robjects.r('remotesync(dps,download.missing = TRUE)')
-	robjects.r("options('nat.default.neuronlist'='dps')")
+	"""
+	if db = 'fc':
+		robjects.r("options('nat.default.neuronlist'='fc')")
+	elif db = 'gmr':
+		robjects.r("options('nat.default.neuronlist'='gmrdps')")
+	"""
 
 	#Make R functions callable in Python
 	nblast_fafb = robjects.r( 'nblast_fafb' )
@@ -70,8 +77,12 @@ if __name__ == '__main__':
 	#print( 'flycircuit scoremat:' ,str( robjects.r('getOption("flycircuit.scoremat")') ) )
 	#print( 'Nat neuronlist:' ,str( robjects.r('getOption("nat.default.neuronlist")') ) )
 
-	res = nblast_fafb( int(skid), mirror = mirror, reverse = reverse )	
-	su = summary( res )	
+	if db == 'fc':
+		res = nblast_fafb( int(skid), mirror = mirror, reverse = reverse, db = fcdps )	
+		su = summary( res, db = fcdps )	
+	elif db == 'gmr':
+		res = nblast_fafb( int(skid), mirror = mirror, reverse = reverse, db = gmrdps )	
+		su = summary( res, db = gmrdps )
 
 	#Read results into python data objects
 	#summary = dict( zip( su.names, map( list, list( su ) ) ) )	
@@ -93,7 +104,11 @@ if __name__ == '__main__':
 	#Generate a 3d html from the results
 	plot3d = robjects.r( 'plot3d')
 	writeWebGL = robjects.r( 'writeWebGL' )
-	plot3d( res , hits = robjects.IntVector( range( hits + 1 ) ) )
+	if db == 'fc':
+		plot3d( res , hits = robjects.IntVector( range( hits + 1 ) ), db = fcdps )
+	elif db == 'gmr':
+		plot3d( res , hits = robjects.IntVector( range( hits + 1 ) ), db = gmrdps )
+
 	writeWebGL( 'webGL', width = 1000 )
 	robjects.r('rgl.close()')
 

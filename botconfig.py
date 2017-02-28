@@ -17,3 +17,7 @@ SLACK_KEY = ''
 #Zotero credentials
 ZOT_KEY = ''
 ZOT_GRP_ID = ''
+
+#Nblast databases
+FLYCIRCUIT_DB = ''
+JANELIA_GMR_DB = '' 

@@ -462,16 +462,17 @@ class return_help(threading.Thread):
 			response += '3. Add _threshold=3_ to filter partners for a minimum number of synapses\n'		
 		elif 'nblast' in self.command:
 			response = '_nblast_ blasts the provided neuron against the flycircuit database. Use the following optional arguments to refine: \n'
-			response += '1. Use _nblast #skid nomirror_ to prevent mirroring of neurons before nblasting (i.e. if cellbody is already on the flys left). \n'
-			response += '2. Use _nblast #skid hits=N_ to return the top N hits in the 3D plot. Default is 3\n'		
+			response += '1. Use _nblast #skid *nomirror*_ to prevent mirroring of neurons before nblasting (i.e. if cellbody is already on the flys left). \n'
+			response += '2. Use _nblast #skid *hits=N*_ to return the top N hits in the 3D plot. Default is 3\n'
+			response += '3. Use _nblast #skid *gmrdb*_ to nblast against Janelia  \n'		
 		elif 'neurondb' in self.command:
 			response = '_neurondb_ lets you access and edit the neuron database. \n'
-			response += '1. Use _neurondb list_ to get a list of all neurons in the database. \n'
-			response += '2. Use _neurondb search tag1 tag2 tag3_ to search for hits in the database. \n'			
-			response += '3. Use _neurondb show #skid1 #skid2_ to show a summary for those skeleton ids. \n'
-			response += '4. Use _neurondb edit #skid name="MVP2" comments="awesome neuron"_ to edit entries. \n'
+			response += '1. Use _neurondb *list*_ to get a list of all neurons in the database. \n'
+			response += '2. Use _neurondb *search* tag1 tag2 tag3_ to search for hits in the database. \n'			
+			response += '3. Use _neurondb *show* #skid1 #skid2_ to show a summary for those skeleton ids. \n'
+			response += '4. Use _neurondb *edit* #skid name="MVP2" comments="awesome neuron"_ to edit entries. \n'
 			response += '   For list entries such as <comments> or <neuropils> you can use "comments=comment1;comment2;comment3" to add multiple entries at a time. \n'
-			response += '5. To delete specific comments/tags use e.g. _neurondb delete comments=1_ to remove the first comment. \n'
+			response += '5. To delete specific comments/tags use e.g. _neurondb *delete* comments=1_ to remove the first comment. \n'
 		else:			
 			functions = [
 						'_review-status #SKID_ : give me a list of skids and I will tell you their review status',
@@ -728,8 +729,9 @@ if __name__ == '__main__':
 		while True:
 			try:
 				command, channel, user = parse_slack_output( slack_client.rtm_read(), user_list )
-			except:
-				print('Oops - Error parsing slack output %s' % str( datetime.now() ) )
+			except BaseException as e:
+				print('Error parsing slack output %s' % str( datetime.now() ) )
+				print( e )
 
 			if command and channel:
 				#Replace odd ” with "
@@ -767,7 +769,12 @@ if __name__ == '__main__':
 									except:
 										hits = 3
 
-									p = subprocess.Popen("python3 ffnblast.py %s %s %s %i" % ( skids[0], channel, mirror, hits ) , shell=True)
+									if 'gmrdb' in command:
+										db = 'gmr'
+									else:
+										db = 'fc'
+
+									p = subprocess.Popen("python3 ffnblast.py %s %s %i %i %s" % ( skids[0], channel, int(mirror), hits, db ) , shell=True)
 									open_processes.append(p)
 							else:
 								slack_client.api_call("chat.postMessage", channel=channel, text='I need a single skeleton ID to nblast! E.g. #123456', as_user=True)
@@ -799,6 +806,7 @@ if __name__ == '__main__':
 						t.join()						
 						open_threads.remove(t)
 
+			#Check if open processes have finished
 			if open_processes:
 				for p in open_processes:
 					if p.poll() is not None:
