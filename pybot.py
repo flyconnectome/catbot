@@ -21,11 +21,324 @@ import matplotlib.pyplot as plt
 import rpy2.robjects as robjects
 from slackclient import SlackClient
 from plotneuron import plotneuron
-from pymaid import CatmaidInstance, get_review, get_3D_skeleton, retrieve_partners, retrieve_names, skid_exists
+from pymaid import CatmaidInstance, get_review, get_3D_skeleton, retrieve_partners, retrieve_names, skid_exists, retrieve_skids_by_name, retrieve_skids_by_annotation
 from tabulate import tabulate
 from rpy2.robjects.packages import importr
 from pyzotero import zotero
 from datetime import datetime, date
+
+class subscription_manager(threading.Thread):
+	""" Class to procoess subscriptions to neurons	
+	"""
+
+	def __init__(self, slack_client, command, channel, user, global_update = False):
+		try:
+			self.command = command.lower()
+			self.raw_command = command
+			self.channel = channel
+			self.slack_client = slack_client
+			self.global_update = global_update
+			self.user = user
+			self.id = random.randint(1,99999)
+			threading.Thread.__init__(self)			           
+		except:
+			print('!Error initiating thread for',self.command)  
+
+	def join(self):
+		try:
+			threading.Thread.join(self)
+			print('Thread %i closed' % self.id )
+			return None
+		except:
+			print('!ERROR joining thread for',self.url)
+		return None
+
+	def process_neurons( self, skids ):
+		"""
+		Updates neuron entries and returns differences to previous version in subscription database
+
+		Parameters:
+		----------
+		overwrite_existing : if True, existing entries will be updated
+
+		Returns:
+		-------		
+		changes : { skid: { value : [ old, new ] } }
+		"""		
+
+		#Retrieve relevant data from Catmaid server
+		neuron_names = retrieve_names( skids, remote_instance, project_id = botconfig.PROJECT_ID )
+		skdata = get_3D_skeleton( skids, remote_instance, project_id = botconfig.PROJECT_ID )
+		connectivity = retrieve_partners( skids, remote_instance, project_id = botconfig.PROJECT_ID )
+
+		print(skids, connectivity)
+
+		#IDEA: USE MEASUREMENT API INSTEAD!? -> should be much faster!?
+
+		new_data = {}		
+
+		#Extract data
+		for i,s in enumerate(skids):			
+			list_of_childs = { n[0] : [ e[0] for e in skdata[i][0] if e[1] == n[0] ] for n in skdata[i][0] }
+
+			if 'ends' in skdata[i][2]:
+				closed_ends  =  len( [ n for n in skdata[i][0] if n[0] in skdata[i][2]['ends'] ] )
+			else:
+				closed_ends = 0
+
+			if 'uncertain_ends' in skdata[i][2]:
+				uncertain_ends  =  len( [ n for n in skdata[i][0] if n[0] in skdata[i][2]['uncertain_end'] ] )
+			else:
+				uncertain_ends = 0
+
+			open_ends = len( skdata[i][0] ) - closed_ends - uncertain_ends
+
+			synaptic_partners = list( set ( list( connectivity['incoming'].keys() ) + list ( connectivity['outgoing'].keys() ) ) )
+
+			#First collect all synaptically connected neurons
+			all_con = {}
+			for n in connectivity['incoming']:
+				if str(s) in connectivity['incoming'][n]['skids']:					
+					all_con[n] = { 'incoming' : '-', 
+									'outgoing' : '-'
+									}
+			for n in connectivity['outgoing']:
+				if str(s) in connectivity['outgoing'][n]['skids']:					
+					all_con[n] = { 'incoming' : '-', 
+									'outgoing' : '-'
+									}
+
+			#Now fill in connectivity
+			for n in all_con:
+				try:
+					all_con[n]['incoming'] = connectivity['incoming'][n]['skids'][str(s)]
+				except:
+					pass
+				try:
+					all_con[n]['outgoing'] = connectivity['outgoing'][n]['skids'][str(s)]
+				except:
+					pass					
+
+			#Don't forget to update basic_values when editing database entries!				
+			new_data[s] = {		'name'					: neuron_names[str(s)],
+								'branch_points' 		: len( [ n for n in list_of_childs if len(list_of_childs[n]) > 1 ] ),
+								'n_nodes'				: len( skdata[i][0] ),
+								'pre_synapses' 			: len( [ c for c in skdata[i][1] if c[2] == 0 ] ),
+								'post_synapses'			: len( [ c for c in skdata[i][1] if c[2] == 1 ] ),
+								'open_ends'				: open_ends,
+								'synaptic_partners'		: all_con,
+								#'upstream_partners'	: { p: connectivity['incoming'][p]['skids'][s] for p in connectivity['incoming'] if s in connectivity['incoming'][p]['skids'] },
+								#'downstream_partners'	: { p: connectivity['outgoing'][p]['skids'][s] for p in connectivity['outgoing'] if s in connectivity['outgoing'][p]['skids'] },
+								'last_update'			: str( date.today() ),
+								'last_edited_by'		: 'unknown'
+							}
+
+		return new_data
+
+	def run(self):
+		"""
+		Structure of subscription database:
+
+		{ 
+		'users'	: { 
+					user_id: {	
+								'subscriptions': [ neuronA, neuronB, neuronC ] ,								
+								'daily_updates' : True/False,
+								'channel' : channel_id
+							}
+				} ,
+		'neurons' 		: { skid: 
+								'name' : str(),
+								'branch_points' 		: int(),
+								'n_nodes'				: inte(),
+								'pre_synapses' 			: int(),
+								'post_synapses'			: int(),
+								'open_ends'				: int(),
+								'upstream_partners'		: { skid: n_synapses },
+								'downstream_partners'	: { skid: n_synapses },
+								'last_update'			: timestamp_of_last_update,
+								'last_edited_by'		: user_id
+						 }
+		}
+		"""		
+		basic_values = ['name','branch_points','n_nodes','pre_synapses','post_synapses','open_ends']		
+
+		print('Started new thread %i for command <%s> by user <%s>' % (self.id, self.command, self.user ) )
+
+		try:
+			data = shelve.open('subscriptiondb')			
+		except:
+			if self.user != None:
+				self.slack_client.api_call("chat.postMessage", channel='@' + self.user,
+			                          text='Unable to open subscription database!', as_user=True)
+			else:
+				print('Unable to open subscription database.')
+			return
+
+		skids = parse_neurons( self.raw_command )
+
+		#If db is fresh:
+		if len(data) == 0:
+			data['users'] = {}
+			data['neurons'] = {}					
+
+		#If user not yet in database, add entry
+		if self.user not in data['users']:
+			#Have to do this explicitedly - otherwise shelve won't update
+			users = data['users']
+			users[self.user] = { 	'subscriptions' : [],
+									'daily_updates' : True }
+			data['users'] = users		
+
+		if 'list' in self.command:
+			#List current subscriptions
+			neuron_names = retrieve_names( data['users'][self.user]['subscriptions'] ,remote_instance)
+			if neuron_names:
+				response = 'You are currently subscribed to the following neurons: \n'
+				response += '```' + tabulate( [ (neuron_names[str(s)], '#'+str(s) ) for s in data['users'][self.user]['subscriptions'] ] ) + '```'
+			else:
+				response = 'Currently, I do not have any subscriptions for you!'
+		if 'new' in self.command:
+			#Add new subscriptions
+			if skids:	
+				users = data['users']			
+				users[self.user]['subscriptions'] += skids 
+				users[self.user]['subscriptions'] = list ( set( users[self.user]['subscriptions'] ) )
+				data['users'] = users
+
+				new_data = self.process_neurons( [ s for s in skids if s not in data['neurons'] ]  )
+				old_data = data['neurons']
+				old_data.update( new_data )
+				data['neurons'] = old_data
+
+				response = 'Thanks! I have subscribed you to `' + ' #'.join( [ str(s )for s in skids ] ) + '`'
+			else:
+				response = 'Please give me at least a single neuron to subscribe you to!'
+		if 'auto' in self.command:
+			users = data['users']
+			#Switch 
+			users[self.user]['daily_updates'] = users[self.user]['daily_updates'] == False
+			data['users'] = users
+
+			if data['users'][self.user]['daily_updates'] is True:
+				response = 'Thanks! You will now automatically receive daily updates for your subscribed neurons.'
+			else:
+				response = 'Thanks! You will no longer receive daily updates.'
+
+		if 'delete' in self.command:
+			#Delete subscriptions			
+			if skids:
+				response = 'Thanks! I succesfully unsubscribed you from neuron(s) ```'
+				for s in skids:
+					try:
+						users = data['users']
+						users[self.user]['subscriptions'].remove( s )
+						data['users'] = users
+						response += +'#' + str(s) + ' '
+					except:
+						pass
+				response = '```'					
+			else:
+				response = 'Please provide me at least a single neuron to subscribe you to!'
+
+		if 'update' in self.command or self.global_update is True:
+			if self.global_update is True:
+				users_to_notify = [ u for u in data['users'] if data['users'][u]['daily_updates'] is True ]
+				new_data = self.process_neurons ( [ n for n in data['neurons'] ] )
+			else:
+				users_to_notify = [ self.user ]
+				new_data = self.process_neurons ( data['users'][self.user]['subscriptions'] ) 
+
+			for u in users_to_notify:
+				not_changed = []
+				response = ''
+				if not skids: 
+					neurons_to_update = data['users'][u]['subscriptions']
+				else:
+					neurons_to_update = skids
+
+				for n in neurons_to_update:
+					#Changes are sorted into basic values and more complicated stuff (i.e. synaptic partners)
+					changes = { 
+								'basic': {},
+								'synaptic_partners': {}
+								}
+
+					#Search for change in basic values
+					for e in basic_values:
+						if new_data[n][e] != data['neurons'][n][e]:
+							changes['basic'][e] = [ new_data[n][e] , data['neurons'][n][e] ]
+
+					#Search for changes in values that are lists (i.e. up- and downstream partners)
+					for e in new_data[n]['synaptic_partners']:
+						try:
+							if new_data[n]['synaptic_partners'][e] != data['neurons'][n]['synaptic_partners'][e]:
+								changes['synaptic_partners'][e] = [ new_data[n]['synaptic_partners'][e], data[n]['synaptic_partners'][e] ]
+						except:
+							#When partner is entirely new
+							changes['synaptic_partners'][e] = [ new_data[n]['synaptic_partners'][e], {'incoming':'-', 'outgoing': '- '} ]
+
+					#Search for partners that have vanished
+					for e in data['neurons'][n]['synaptic_partners']:
+						try:
+							if new_data[n]['synaptic_partners'][e] != data['neurons'][n]['synaptic_partners'][e]:
+								changes['synaptic_partners'][e] = [ new_data[n]['synaptic_partners'][e], data['neurons'][n]['synaptic_partners'][e] ]
+						except:
+							changes['synaptic_partners'][e] = [ {'incoming':'-', 'outgoing': '- '} , data['neurons'][n]['synaptic_partners'][e] ]
+
+					#If changes have been found, generate response 
+					if changes['basic'] or changes['synaptic_partners']:
+						response += '%s - #%s (changes since %s) \n```' % ( new_data[n]['name'] ,str(n), data['neurons'][n]['last_update'] )
+					else:
+						not_changed.append(n)
+					#Basic values first
+					if changes['basic']:						
+						if True in [ e in changes['basic'] for e in basic_values ]:							
+							table = [ [ 'Value', 'New', 'Old' ] ] + [ [ e, changes['basic'][e][0], changes['basic'][e][1] ] for e in basic_values if e in changes['basic'] ] 
+							response += tabulate(table) + '\n'
+					#Now connectivity
+					if changes['synaptic_partners']:
+						partner_names = retrieve_names( list( changes['synaptic_partners'].keys() ), remote_instance )
+						response += 'Synaptic partners:\n'
+
+						table = [ [ 'Name', 'SKID', 'Synapses from (new/old)', 'Synapses to (new/old)'  ] ] 
+						table += [ [ partner_names[e], e, str(changes['synaptic_partners'][e][0]['incoming'])+'/'+str(changes['synaptic_partners'][e][1]['incoming']), str(changes['synaptic_partners'][e][0]['outgoing'])+'/'+str(changes['synaptic_partners'][e][1]['outgoing']),   ] for e in changes['synaptic_partners'] ] 
+						response += tabulate(table) + '\n'	
+
+					if changes['basic'] or changes['synaptic_partners']:
+						response += '```\n'							
+
+				if response:
+					self.slack_client.api_call("chat.postMessage", channel='@' + u,
+			                          text= response  , as_user=True)
+					if not_changed:
+						self.slack_client.api_call("chat.postMessage", channel='@' + u,
+			                          text= 'No changes for neurons `' + ', '.join(not_changed) + '`', as_user=True)
+					#Reset response
+					response = ''
+				else:
+					self.slack_client.api_call("chat.postMessage", channel= '@' + u,
+			                          text='None of the neurons you are subscribed to have changed recently!', as_user=True)
+
+			#Only update database if this is one of the scheduled global updates
+			if self.global_update:
+				neurons = data['neurons']
+				neurons.update(new_data)
+				data['neurons'] = neurons
+		try:			
+			data.close()
+			if self.user != None:
+				self.slack_client.api_call("chat.postMessage", channel='@' + self.user,
+				                          text=response, as_user=True)
+			else:
+				print(response)
+		except:
+			if self.user != None:
+				self.slack_client.api_call("chat.postMessage", channel='@' + self.user,
+				                          text='Oops! Something went wrong. If you made any changes to your subscriptions, please try again.', as_user=True)
+			else:
+				print(response)
+		return
 
 class return_review_status(threading.Thread):
 	""" Class to process incoming review-status request
@@ -33,6 +346,7 @@ class return_review_status(threading.Thread):
 	def __init__(self, slack_client ,command,channel):
 		try:
 			self.command = command.lower()
+			self.raw_command = command
 			self.channel = channel
 			self.slack_client = slack_client
 			self.id = random.randint(1,99999)
@@ -53,7 +367,10 @@ class return_review_status(threading.Thread):
 		""" Extracts skids from command and returns these neurons review-status.
 		"""	
 		print('Started new thread %i for command <%s>' % (self.id, self.command ) )
-		skids = re.findall('#(\d+)',self.command)
+		skids = parse_neurons( self.raw_command )
+
+		ts = self.slack_client.api_call("chat.postMessage", channel=self.channel,
+									text='Got it! Collecting intel - please wait...', as_user=True)['ts']
 
 		for s in skids:
 			if skid_exists( s, remote_instance ) is False:
@@ -63,13 +380,19 @@ class return_review_status(threading.Thread):
 				return
 
 		if not skids:
-			response = 'Please provide skids as *#skid*! For example: _@catbot review-status #957684_'
-		else:
-			r_status = get_review (skids, remote_instance = remote_instance)
-			response = 'This is the current review status: ```'
-			for s in r_status:
-				response += '\n #%s: %i %%' % (s, int(r_status[s][1]/r_status[s][0] * 100) )
+			response = 'Please provide neurons as *#skid*, *annotation=" "* or *name=" "*! For example: _@catbot review-status #957684_'
+		else:			
+			names = retrieve_names(skids, remote_instance = remote_instance, project_id = botconfig.PROJECT_ID)
+			r_status = get_review(skids, remote_instance = remote_instance, project_id = botconfig.PROJECT_ID)			
+			response = 'This is the current review status: ```'			
+			table = [ ('Name','SKID','% Reviewed') ] + [ ( names[s], '#'+str(s), int( r_status[s][1]/r_status[s][0] * 100) ) for s in r_status ]
+			response += tabulate(table)
 			response += '```'
+
+		self.slack_client.api_call(	"chat.delete",
+									channel = self.channel,
+									ts = ts
+									)
 
 		if response:
 			self.slack_client.api_call("chat.postMessage", channel=self.channel,
@@ -83,6 +406,7 @@ class return_plot_neuron(threading.Thread):
 	def __init__(self, slack_client ,command,channel):
 		try:
 			self.command = command.lower()
+			self.raw_command = command
 			self.channel = channel
 			self.slack_client = slack_client
 			self.id = random.randint(1,99999)
@@ -103,10 +427,10 @@ class return_plot_neuron(threading.Thread):
 		""" Extracts skids from command and generates + uploads a file
 		"""
 		print('Started new thread %i for command <%s>' % (self.id, self.command ) )
-		skids = re.findall('#(\d+)',self.command)
+		skids = parse_neurons( self.raw_command )
 
 		if not skids:
-			response = 'Please provide skids as *#skid*! For example: _@catbot plot-neuron #957684_'
+			response = 'Please provide neurons as *#skid*, *annotation=" "* or *name=" "*! For example: _@catbot plot-neuron #957684_'
 		else:		
 			for s in skids:
 				if skid_exists( s, remote_instance ) is False:
@@ -148,6 +472,7 @@ class return_connectivity(threading.Thread):
 	def __init__(self, slack_client ,command,channel):
 		try:
 			self.command = command.lower()
+			self.raw_command = command
 			self.channel = channel
 			self.slack_client = slack_client
 			self.id = random.randint(1,99999)
@@ -167,11 +492,12 @@ class return_connectivity(threading.Thread):
 	def run(self):
 		""" Returns urls for a list of neurons
 		"""		
-		skids = re.findall('#(\d+)',self.command)
+		skids = parse_neurons( self.raw_command )
+
 		print('Started new thread %i for command <%s>' % (self.id, self.command ) )
 
 		for s in skids:
-			if skid_exists( s, remote_instance ) is False:
+			if skid_exists( s, remote_instance, project_id = botconfig.PROJECT_ID ) is False:
 				response = "I'm sorry - the neuron #%s does not seem to exists. Please try again." % s
 				self.slack_client.api_call("chat.postMessage", channel=self.channel,
 	                          text=response, as_user=True)
@@ -198,10 +524,10 @@ class return_connectivity(threading.Thread):
 			directions = ['outgoing']
 
 		if not skids:
-			response = 'Please provide skids as *#skid*! For example: _plot-neuron #957684_'
+			response = 'Please provide neurons as `#skid`, `annotation=" "` or `name=" "`! For example: `@catbot partners #957684`'
 		else:				
-			cn = retrieve_partners( skids, remote_instance , threshold = thresh)
-			neuron_names = retrieve_names( list( set( [ n for n in cn['incoming'] ] + [ n for n in cn['outgoing'] ] + skids ) ) , remote_instance )
+			cn = retrieve_partners( skids, remote_instance , threshold = thresh, project_id = botconfig.PROJECT_ID)
+			neuron_names = retrieve_names( list( set( [ n for n in cn['incoming'] ] + [ n for n in cn['outgoing'] ] + skids ) ) , remote_instance, project_id = botconfig.PROJECT_ID )
 
 			trunc_names = {}
 			for n in neuron_names:
@@ -247,6 +573,7 @@ class return_url(threading.Thread):
 	def __init__(self, slack_client ,command,channel):
 		try:
 			self.command = command.lower()
+			self.raw_command = command
 			self.channel = channel
 			self.slack_client = slack_client
 			self.id = random.randint(1,99999)
@@ -266,7 +593,7 @@ class return_url(threading.Thread):
 	def run(self):
 		""" Returns urls for a list of neurons
 		"""		
-		skids = re.findall('#(\d+)',self.command)
+		skids = parse_neurons( self.raw_command )
 		print('Started new thread %i for command <%s>' % (self.id, self.command ) )
 
 		for s in skids:
@@ -277,13 +604,13 @@ class return_url(threading.Thread):
 				return
 
 		if not skids:
-			response = 'Please provide skids as *#skid*! For example: _plot-neuron #957684_'
+			response = 'Please provide neurons as `#skid`, `annotation=" "` or `name=" "`! For example: `@catbot plot-neuron #957684`'
 		else:	
 			response = 'Here are URLs to the neurons you have provided!'
-			skdata = get_3D_skeleton( skids, remote_instance , connector_flag = 0, tag_flag = 0, get_history = False, time_out = None, silent = True)
+			skdata = get_3D_skeleton( skids, remote_instance , connector_flag = 0, tag_flag = 0, get_history = False, time_out = None, silent = True , project_id = botconfig.PROJECT_ID)
 			for i, neuron in enumerate(skdata):
 				root = [n for n in neuron[0] if n[1] == None][0]
-				url = remote_instance.url_to_coordinates( 1 , root[3:6] , stack_id = 8, tool = 'tracingtool' , active_skeleton_id = skids[i], active_node_id = root[0] )
+				url = remote_instance.url_to_coordinates( botconfig.PROJECT_ID , root[3:6] , stack_id = 8, tool = 'tracingtool' , active_skeleton_id = skids[i], active_node_id = root[0] )
 				response += '\n *#%s*: %s' % ( skids[i], url )
 
 		if response:
@@ -293,11 +620,12 @@ class return_url(threading.Thread):
 		return response
 
 class return_zotero(threading.Thread):
-	""" Class to process requests to access zotero
+	""" Class to process requests to access Zotero
 	"""
 	def __init__(self, slack_client ,command,channel):
 		try:
 			self.command = command.lower()
+			self.raw_command = command
 			self.channel = channel
 			self.slack_client = slack_client
 			self.id = random.randint(1,99999)
@@ -345,7 +673,7 @@ class return_zotero(threading.Thread):
 			tags.remove('file')
 			if len(tags) > 1:
 				self.slack_client.api_call("chat.postMessage", channel=self.channel,
-		                          text='If you want me to grab you a PDF, please give me a single zotero key: _@catbot zotero file ZOTERO-ID_', as_user=True)
+		                          text='If you want me to grab you a PDF, please give me a single zotero key: `@catbot zotero file <ZOTERO-ID>`', as_user=True)
 			elif len(tags) == 1:
 				this_item = [ f for f in pdf_files if f['data']['parentItem'].lower() == tags[0] ]
 
@@ -420,7 +748,7 @@ class return_zotero(threading.Thread):
 				elif len(e['data']['creators']) == 1:			
 					response += '%s, %s (%s): %s %s (%s)\n\n' % ( authors[0], journal, date, title , doi_url, zot_key  )
 			response += '```\n'
-			response += 'Use _@catbot zotero file ZOTERO-ID_ if you want me to grab you the PDF!'
+			response += 'Use `@catbot zotero file <ZOTERO-ID>` if you want me to grab you the PDF!'
 		else:
 			response = 'Sorry, I could not find anything matching your criteria!'
 
@@ -435,6 +763,7 @@ class return_help(threading.Thread):
 	def __init__(self, slack_client ,command,channel):
 		try:
 			self.command = command.lower()
+			self.raw_command = command
 			self.channel = channel
 			self.slack_client = slack_client
 			self.id = random.randint(1,99999)
@@ -456,52 +785,63 @@ class return_help(threading.Thread):
 		"""
 		print('Started new thread %i for command <%s>' % (self.id, self.command ) )		
 		if 'partners' in self.command:
-			response = '_partners_ returns the synaptic partners for a list of skids. You can pass me keywords to filter the list: \n'
-			response += '1. Add _incoming_ or _outgoing_ to limit results to up- or downstream partners \n'
-			response += '2. Add _filter="tag1,tag2"_ to filter results for neuron names (case-insensitive, non-intersecting)\n'
-			response += '3. Add _threshold=3_ to filter partners for a minimum number of synapses\n'		
+			response = '`partners` returns the synaptic partners for a list of <neurons>. You can pass me keywords to filter the list: \n'
+			response += '1. Add `incoming` or `outgoing` to limit results to up- or downstream partners \n'
+			response += '2. Add `filter="tag1,tag2"` to filter results for neuron names (case-insensitive, non-intersecting)\n'
+			response += '3. Add `threshold=3` to filter partners for a minimum number of synapses\n'		
 		elif 'nblast' in self.command:
-			response = '_nblast_ blasts the provided neuron against the flycircuit database. Use the following optional arguments to refine: \n'
-			response += '1. Use _nblast #skid *nomirror*_ to prevent mirroring of neurons before nblasting (i.e. if cellbody is already on the flys left). \n'
-			response += '2. Use _nblast #skid *hits=N*_ to return the top N hits in the 3D plot. Default is 3\n'
-			response += '3. Use _nblast #skid *gmrdb*_ to nblast against Janelia  \n'		
+			response = '`nblast` blasts the provided neuron against the flycircuit database. Use the following optional arguments to refine: \n'
+			response += '1. Use `nblast <neuron> *nomirror*` to prevent mirroring of neurons before nblasting (i.e. if cellbody is already on the flys left). \n'
+			response += '2. Use `nblast <neuron> *hits=N*` to return the top N hits in the 3D plot. Default is 3\n'
+			response += '3. Use `nblast <neuron> *gmrdb*` to nblast against Janelia  \n'		
+			response += '4. Use `nblast <neuron> *cores=N*` to set the number of CPU cores used to nblast. Default is 8\n'
 		elif 'neurondb' in self.command:
-			response = '_neurondb_ lets you access and edit the neuron database. \n'
-			response += '1. Use _neurondb *list*_ to get a list of all neurons in the database. \n'
-			response += '2. Use _neurondb *search* tag1 tag2 tag3_ to search for hits in the database. \n'			
-			response += '3. Use _neurondb *show* #skid1 #skid2_ to show a summary for those skeleton ids. \n'
-			response += '4. Use _neurondb *edit* #skid name="MVP2" comments="awesome neuron"_ to edit entries. \n'
+			response = '`neurondb` lets you access and edit the neuron database. \n'
+			response += 'I am using skeleton IDs as unique identifiers -> you can search for names/annotations/etc but I need a SKID when you want to add/edit an entry! \n'
+			response += '1. Use `neurondb *list*` to get a list of all neurons in the database. \n'
+			response += '2. Use `neurondb *search* <tag1> <tag2> ...` to search for hits in the database. \n'			
+			response += '3. Use `neurondb *show* <single neuron>` to show a summary for those skeleton ids. \n'
+			response += '4. Use `neurondb *edit* <single neuron> name="MVP2" comments="awesome neuron"` to edit entries. \n'
 			response += '   For list entries such as <comments> or <neuropils> you can use "comments=comment1;comment2;comment3" to add multiple entries at a time. \n'
-			response += '5. To delete specific comments/tags use e.g. _neurondb *delete* comments=1_ to remove the first comment. \n'
+			response += '5. To delete specific comments/tags use e.g. `neurondb *delete* comments=<index>` to remove the <index> (e.g. 1 = first) comment. \n'
+		elif 'subscription' in self.command:
+			response = '`subscription` lets you flag neurons of interest and I will keep you informed when they are modified. \n'
+			response += 'By default you will automatically receive daily updates but you can use `update` at any time to get an unscheduled summary.\n'			
+			response += '1. Use `subscription *list*` to get a list of all neurons you are currently subscribed to. \n'
+			response += '2. Use `subscription *new* <neuron(s)>` to subscribe to neurons. \n'
+			response += '3. Use `subscription *update*` to get an unscheduled summary of changes. Unless you also provide <neurons>, you will get all subscriptions. \n'
+			response += '4. Use `subscription *delete* <neuron(s)>` to unsubscribe to neurons. \n'			
 		else:			
-			functions = [
-						'_review-status #SKID_ : give me a list of skids and I will tell you their review status',
-						'_plot #SKID_ : give me a list of skids to plot',
-						'_url #SKID_ : give me a list of skids and I will generate urls to their root nodes',
-						'_nblast #SKID_ : give me a single skid and let me run an nblast search. Use _@catbot help nblast_ to learn more.',
-						'_zotero TAG1 TAG2 TAG3_ : give me tags and I will search our Zotero group for you',
-						'_zotero file ZOTERO-ID_ : give me a Zotero ID and I will download the PDF for you',
-						'_partners #SKID_ : returns synaptic partners. Use _@catbot help partners_ to learn more.',
-						'_neurondb_ : accesses the neuron database. Use _@catbot help neurondb_ to learn more. .',
-						'_help_ : I will tell you what I am capable of'
+			functions = [						
+						'`neurondb` : accesses the neuron database. Use `@catbot help neurondb` to learn more.',
+						'`subscribe` : accesses the subscription system. Use `@catbot help subscription` to learn more.',
+						'`review-status <neurons>` : give me a list of neurons and I will tell you their review status.',
+						'`plot <neurons>` : give me a list of neurons to plot.',
+						'`url <neurons>` : give me a list of neurons and I will generate urls to their root nodes.',
+						'`nblast <neuron>` : give me a *single* neuron and let me run an nblast search. Use `@catbot help nblast` to learn more.',
+						'`zotero TAG1 TAG2 TAG3` : give me tags and I will search our Zotero group for you',
+						'`zotero file ZOTERO-ID` : give me a Zotero ID and I will download the PDF for you',
+						'`partners <neurons>` : returns synaptic partners. Use `@catbot help partners` to learn more.',	
+						'`help` : You have just used that, dummy...'
 						]
 
 			response = 'Currently I can help you with the following commands:'
 			for f in functions:
 				response += '\n' + f
-			response += '\n skids have to start with a # (hashtag), separate multiple arguments by space'
+			response += '\n You can pass me `<neurons>` either via their skids `#451234`, annotation `annotation="DA1"` or name `name="DA1 PN"`'
 
 		if response:
 			self.slack_client.api_call("chat.postMessage", channel=self.channel,
 		                          text=response, as_user=True)
 		return 
 
-class return_shelve(threading.Thread):
-	""" Class to process incoming help request
+class neurondb_manager(threading.Thread):
+	""" Class to process incoming request to the neuron database
     """
 	def __init__(self, slack_client, command, channel, user):
 		try:
 			self.command = command
+			self.raw_command = command
 			self.channel = channel
 			self.user = user
 			self.slack_client = slack_client
@@ -578,13 +918,13 @@ class return_shelve(threading.Thread):
 		#Define entries here!
 		self.entries = ['name','catmaid_name','skid','alternative_names','type','neuropils','status','tags','last_edited','comments']				
 
-		skids = re.findall('#(\d+)', self.command.lower())
+		skids = parse_neurons( self.raw_command )
 
 		if skids:
 			self.neuron_names = retrieve_names( skids, remote_instance )
 
 		try:
-			data = shelve.open('neurondb')
+			data = shelve.open('neurondb')			
 		except:
 			self.slack_client.api_call("chat.postMessage", channel=self.channel,
 		                          text='Unable to open neuron database!', as_user=True)
@@ -632,7 +972,7 @@ class return_shelve(threading.Thread):
 
 		elif 'edit' in self.command.lower():
 			if len(skids) != 1:
-				response = 'Please give me a *single* skid: e.g. _@catbot new #435678_'
+				response = 'Please give me a *single* skid: e.g. `@catbot neurondb new #435678`'
 			else:
 				if skids[0] not in data:
 					if skids[0] in self.neuron_names:						
@@ -658,7 +998,7 @@ class return_shelve(threading.Thread):
 				response = 'Updated entry for neuron %s #%s!' % ( data[ skids[0] ]['name'], skids[0] )
 		elif 'delete' in self.command.lower():
 			if len(skids) != 1:
-				response = 'Please give me a *single* skid: e.g. _@catbot new #435678_'
+				response = 'Please give me a *single* skid: e.g. `@catbot neurondb delete #435678`'
 			elif skids[0] not in data:
 				response = 'Could not find neuron #%s in my database.' % ( skids[0] )
 			else:
@@ -666,7 +1006,7 @@ class return_shelve(threading.Thread):
 				response = 'Updated entry for neuron %s #%s!' % ( data[ skids[0] ]['name'], skids[0] )
 
 		else: 
-			response = 'Not quite sure what you want me to do with the neurondb. Please use _@catbot help neurondb_'
+			response = 'Not quite sure what you want me to do with the neurondb. Please use `@catbot help neurondb` to learn more.'
 
 		try:
 			data.close()
@@ -694,6 +1034,24 @@ def parse_slack_output(slack_rtm_output, user_list):
                        output['channel'], \
                        [ e['name'] for e in user_list['members'] if e['id'] == output['user'] ][0]                       
     return None, None, None
+
+def parse_neurons( command ):
+	"""Parses the command in search of skeleton IDs, neuron names and annotations
+	"""
+
+	skids = []
+
+	#First find skids:
+	if re.findall('#(\d+)', command):
+		skids += re.findall('#(\d+)', command)
+
+	if 'name="' in command:
+		skids += retrieve_skids_by_name( re.search('name="(.*?)"', command ).group(1), allow_partial = True, remote_instance = remote_instance, project_id = botconfig.PROJECT_ID )
+
+	if 'annotation="' in command:
+		skids += retrieve_skids_by_annotation( re.search('annotation="(.*?)"', command ).group(1) , remote_instance = remote_instance, project_id = botconfig.PROJECT_ID )
+
+	return list( set( [ int(n) for n in skids ] ) )
 
 
 if __name__ == '__main__':
@@ -730,7 +1088,7 @@ if __name__ == '__main__':
 			try:
 				command, channel, user = parse_slack_output( slack_client.rtm_read(), user_list )
 			except BaseException as e:
-				print('Error parsing slack output %s' % str( datetime.now() ) )
+				print('Error parsing slack output %s:' % str( datetime.now() ) )
 				print( e )
 
 			if command and channel:
@@ -751,12 +1109,16 @@ if __name__ == '__main__':
 						elif 'partners' in command.lower():
 							t = return_connectivity(slack_client, command, channel)
 						elif 'neurondb' in command.lower():
-							t = return_shelve(slack_client, command, channel, user)
+							t = neurondb_manager(slack_client, command, channel, user)
+						elif 'subscription' in command.lower():
+							t = subscription_manager(slack_client, command, channel, user)
 						elif 'nblast' in command.lower():
-							#t = return_nblast(slack_client, command, channel)
+							
 							#For some odd reason, threading does not prevent freezing while waiting R code to return nblast results
 							#Therfore nblasting is used as a fire and forget script by creating a new subprocess
-							skids = re.findall('#(\d+)', command)
+
+							skids = parse_neurons( command )							
+
 							if len(skids) == 1:								
 								if skid_exists( skids[0], remote_instance ) is False:
 										response = "I'm sorry - the neuron #%s does not seem to exists. Please try again." % skids[0]
@@ -769,15 +1131,20 @@ if __name__ == '__main__':
 									except:
 										hits = 3
 
+									try:
+										cores = int ( re.search('cores=(\d+)', command ).group(1) )
+									except:
+										cores = 8
+
 									if 'gmrdb' in command:
 										db = 'gmr'
 									else:
 										db = 'fc'
 
-									p = subprocess.Popen("python3 ffnblast.py %s %s %i %i %s" % ( skids[0], channel, int(mirror), hits, db ) , shell=True)
+									p = subprocess.Popen("python3 ffnblast.py %s %s %i %i %s %i" % ( skids[0], channel, int(mirror), hits, db, cores ) , shell=True)
 									open_processes.append(p)
 							else:
-								slack_client.api_call("chat.postMessage", channel=channel, text='I need a single skeleton ID to nblast! E.g. #123456', as_user=True)
+								slack_client.api_call("chat.postMessage", channel=channel, text='I need a *single* neuron to nblast! E.g. `@catbot nblast #123456` ', as_user=True)
 						elif 'zotero' in command.lower():
 							if zot:
 								t = return_zotero(slack_client, command, channel)

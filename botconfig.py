@@ -10,6 +10,7 @@ SERVER_URL = ''
 AUTHTOKEN = ''
 HTTP_USER = ''
 HTTP_PW = ''
+PROJECT_ID = 
 
 #Slack credentials
 SLACK_KEY = ''
