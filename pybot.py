@@ -39,8 +39,8 @@ class subscription_manager(threading.Thread):
 			self.slack_client = slack_client
 			self.global_update = global_update
 			self.user = user
-			self.id = random.randint(1,99999)
-			threading.Thread.__init__(self)			           
+			self.id = random.randint(1,99999)			
+			threading.Thread.__init__(self)		
 		except:
 			print('!Error initiating thread for',self.command)  
 
@@ -69,9 +69,7 @@ class subscription_manager(threading.Thread):
 		#Retrieve relevant data from Catmaid server
 		neuron_names = retrieve_names( skids, remote_instance, project_id = botconfig.PROJECT_ID )
 		skdata = get_3D_skeleton( skids, remote_instance, project_id = botconfig.PROJECT_ID )
-		connectivity = retrieve_partners( skids, remote_instance, project_id = botconfig.PROJECT_ID )
-
-		print(skids, connectivity)
+		connectivity = retrieve_partners( skids, remote_instance, project_id = botconfig.PROJECT_ID )	
 
 		#IDEA: USE MEASUREMENT API INSTEAD!? -> should be much faster!?
 
@@ -127,8 +125,6 @@ class subscription_manager(threading.Thread):
 								'post_synapses'			: len( [ c for c in skdata[i][1] if c[2] == 1 ] ),
 								'open_ends'				: open_ends,
 								'synaptic_partners'		: all_con,
-								#'upstream_partners'	: { p: connectivity['incoming'][p]['skids'][s] for p in connectivity['incoming'] if s in connectivity['incoming'][p]['skids'] },
-								#'downstream_partners'	: { p: connectivity['outgoing'][p]['skids'][s] for p in connectivity['outgoing'] if s in connectivity['outgoing'][p]['skids'] },
 								'last_update'			: str( date.today() ),
 								'last_edited_by'		: 'unknown'
 							}
@@ -139,26 +135,25 @@ class subscription_manager(threading.Thread):
 		"""
 		Structure of subscription database:
 
-		{ 
-		'users'	: { 
-					user_id: {	
-								'subscriptions': [ neuronA, neuronB, neuronC ] ,								
-								'daily_updates' : True/False,
-								'channel' : channel_id
-							}
-				} ,
-		'neurons' 		: { skid: 
-								'name' : str(),
-								'branch_points' 		: int(),
-								'n_nodes'				: inte(),
-								'pre_synapses' 			: int(),
-								'post_synapses'			: int(),
-								'open_ends'				: int(),
-								'upstream_partners'		: { skid: n_synapses },
-								'downstream_partners'	: { skid: n_synapses },
-								'last_update'			: timestamp_of_last_update,
-								'last_edited_by'		: user_id
-						 }
+		{ 'users': {
+			'user_id'	: { 
+							
+									'subscriptions': [ neuronA, neuronB, neuronC ] ,								
+									'daily_updates' : True/False,								
+									'neurons' 		: { skid: { 
+															'name' : str(),
+															'branch_points' 		: int(),
+															'n_nodes'				: inte(),
+															'pre_synapses' 			: int(),
+															'post_synapses'			: int(),
+															'open_ends'				: int(),
+															'upstream_partners'		: { skid: n_synapses },
+															'downstream_partners'	: { skid: n_synapses },
+															'last_update'			: timestamp_of_last_update,
+															'last_edited_by'		: user_id
+															}
+													 	}
+			}
 		}
 		"""		
 		basic_values = ['name','branch_points','n_nodes','pre_synapses','post_synapses','open_ends']		
@@ -179,17 +174,18 @@ class subscription_manager(threading.Thread):
 
 		#If db is fresh:
 		if len(data) == 0:
-			data['users'] = {}
-			data['neurons'] = {}					
+			data['users'] = {}								
 
 		#If user not yet in database, add entry
-		if self.user not in data['users']:
-			#Have to do this explicitedly - otherwise shelve won't update
+		if self.user not in data['users'] and self.user != None:
+			#Have to do this explicitedly - otherwise shelve won't update			
 			users = data['users']
 			users[self.user] = { 	'subscriptions' : [],
-									'daily_updates' : True }
-			data['users'] = users		
+									'daily_updates' : True,
+									'neurons': {} }
+			data['users'] = users
 
+		#Now execture user command
 		if 'list' in self.command:
 			#List current subscriptions
 			neuron_names = retrieve_names( data['users'][self.user]['subscriptions'] ,remote_instance)
@@ -206,10 +202,10 @@ class subscription_manager(threading.Thread):
 				users[self.user]['subscriptions'] = list ( set( users[self.user]['subscriptions'] ) )
 				data['users'] = users
 
-				new_data = self.process_neurons( [ s for s in skids if s not in data['neurons'] ]  )
-				old_data = data['neurons']
-				old_data.update( new_data )
-				data['neurons'] = old_data
+				new_data = self.process_neurons( [ s for s in skids if s not in data['users'][self.user]['neurons'] ]  )				
+				old_data = data['users']				
+				old_data[self.user]['neurons'].update( new_data )				
+				data['users'] = old_data
 
 				response = 'Thanks! I have subscribed you to `' + ' #'.join( [ str(s )for s in skids ] ) + '`'
 			else:
@@ -242,9 +238,14 @@ class subscription_manager(threading.Thread):
 				response = 'Please provide me at least a single neuron to subscribe you to!'
 
 		if 'update' in self.command or self.global_update is True:
-			if self.global_update is True:
+			print('Pushing updates')
+			if self.global_update is True:				
 				users_to_notify = [ u for u in data['users'] if data['users'][u]['daily_updates'] is True ]
-				new_data = self.process_neurons ( [ n for n in data['neurons'] ] )
+				print('Global update!', users_to_notify)
+				neurons_in_db = []
+				for u in data['users']:
+					neurons_in_db += [ n for n in data['users'][u]['neurons'] ]
+				new_data = self.process_neurons ( neurons_in_db )
 			else:
 				users_to_notify = [ self.user ]
 				new_data = self.process_neurons ( data['users'][self.user]['subscriptions'] ) 
@@ -266,29 +267,29 @@ class subscription_manager(threading.Thread):
 
 					#Search for change in basic values
 					for e in basic_values:
-						if new_data[n][e] != data['neurons'][n][e]:
-							changes['basic'][e] = [ new_data[n][e] , data['neurons'][n][e] ]
+						if new_data[n][e] != data['users'][u]['neurons'][n][e]:
+							changes['basic'][e] = [ new_data[n][e] , data['users'][u]['neurons'][n][e] ]
 
 					#Search for changes in values that are lists (i.e. up- and downstream partners)
 					for e in new_data[n]['synaptic_partners']:
 						try:
-							if new_data[n]['synaptic_partners'][e] != data['neurons'][n]['synaptic_partners'][e]:
-								changes['synaptic_partners'][e] = [ new_data[n]['synaptic_partners'][e], data[n]['synaptic_partners'][e] ]
+							if new_data[n]['synaptic_partners'][e] != data['users'][u]['neurons'][n]['synaptic_partners'][e]:
+								changes['synaptic_partners'][e] = [ new_data[n]['synaptic_partners'][e], data['users'][u]['neurons'][n]['synaptic_partners'][e] ]
 						except:
 							#When partner is entirely new
 							changes['synaptic_partners'][e] = [ new_data[n]['synaptic_partners'][e], {'incoming':'-', 'outgoing': '- '} ]
 
 					#Search for partners that have vanished
-					for e in data['neurons'][n]['synaptic_partners']:
+					for e in data['users'][u]['neurons'][n]['synaptic_partners']:
 						try:
-							if new_data[n]['synaptic_partners'][e] != data['neurons'][n]['synaptic_partners'][e]:
-								changes['synaptic_partners'][e] = [ new_data[n]['synaptic_partners'][e], data['neurons'][n]['synaptic_partners'][e] ]
+							if new_data[n]['synaptic_partners'][e] != data['users'][u]['neurons'][n]['synaptic_partners'][e]:
+								changes['synaptic_partners'][e] = [ new_data[n]['synaptic_partners'][e], data['users'][u]['neurons'][n]['synaptic_partners'][e] ]
 						except:
-							changes['synaptic_partners'][e] = [ {'incoming':'-', 'outgoing': '- '} , data['neurons'][n]['synaptic_partners'][e] ]
+							changes['synaptic_partners'][e] = [ {'incoming':'-', 'outgoing': '- '} , data['users'][u]['neurons'][n]['synaptic_partners'][e] ]
 
 					#If changes have been found, generate response 
 					if changes['basic'] or changes['synaptic_partners']:
-						response += '%s - #%s (changes since %s) \n```' % ( new_data[n]['name'] ,str(n), data['neurons'][n]['last_update'] )
+						response += '%s - #%s (changes since %s) \n```' % ( new_data[n]['name'] ,str(n), data['users'][u]['neurons'][n]['last_update'] )
 					else:
 						not_changed.append(n)
 					#Basic values first
@@ -299,11 +300,17 @@ class subscription_manager(threading.Thread):
 					#Now connectivity
 					if changes['synaptic_partners']:
 						partner_names = retrieve_names( list( changes['synaptic_partners'].keys() ), remote_instance )
+
+						#If partner does not exist anymore:
+						partner_names.update( { e:'not found' for e in list( changes['synaptic_partners'].keys() ) if e not in partner_names } )
+
 						response += 'Synaptic partners:\n'
 
-						table = [ [ 'Name', 'SKID', 'Synapses from (new/old)', 'Synapses to (new/old)'  ] ] 
+						print('changes:',changes['synaptic_partners'])
+						print(partner_names)
+						table = [ [ 'Name', 'SKID', 'Synapses from (new/old)', 'Synapses to (new/old)' ] ] 
 						table += [ [ partner_names[e], e, str(changes['synaptic_partners'][e][0]['incoming'])+'/'+str(changes['synaptic_partners'][e][1]['incoming']), str(changes['synaptic_partners'][e][0]['outgoing'])+'/'+str(changes['synaptic_partners'][e][1]['outgoing']),   ] for e in changes['synaptic_partners'] ] 
-						response += tabulate(table) + '\n'	
+						response += tabulate(table) + '\n'
 
 					if changes['basic'] or changes['synaptic_partners']:
 						response += '```\n'							
@@ -317,14 +324,14 @@ class subscription_manager(threading.Thread):
 					#Reset response
 					response = ''
 				else:
+					print('user',u)
 					self.slack_client.api_call("chat.postMessage", channel= '@' + u,
 			                          text='None of the neurons you are subscribed to have changed recently!', as_user=True)
 
-			#Only update database if this is one of the scheduled global updates
-			if self.global_update:
-				neurons = data['neurons']
-				neurons.update(new_data)
-				data['neurons'] = neurons
+			#Write back changes to DB
+			users = data['users']
+			users[u]['neurons'].update(new_data)
+			data['users'] = users
 		try:			
 			data.close()
 			if self.user != None:
@@ -806,7 +813,8 @@ class return_help(threading.Thread):
 			response += '5. To delete specific comments/tags use e.g. `neurondb *delete* comments=<index>` to remove the <index> (e.g. 1 = first) comment. \n'
 		elif 'subscription' in self.command:
 			response = '`subscription` lets you flag neurons of interest and I will keep you informed when they are modified. \n'
-			response += 'By default you will automatically receive daily updates but you can use `update` at any time to get an unscheduled summary.\n'			
+			response += 'By default you will automatically receive daily updates (in the morning) \n'
+			response += 'but you can use `update` at any time to get an unscheduled summary.'			
 			response += '1. Use `subscription *list*` to get a list of all neurons you are currently subscribed to. \n'
 			response += '2. Use `subscription *new* <neuron(s)>` to subscribe to neurons. \n'
 			response += '3. Use `subscription *update*` to get an unscheduled summary of changes. Unless you also provide <neurons>, you will get all subscriptions. \n'
@@ -1078,6 +1086,7 @@ if __name__ == '__main__':
 	open_processes = []
 	previous_open_threads = 0
 	command = channel = None
+	last_global_update = date.today()
 
 	user_list = slack_client.api_call('users.list')
 	#print('Users:', user_list)
@@ -1091,13 +1100,20 @@ if __name__ == '__main__':
 				print('Error parsing slack output %s:' % str( datetime.now() ) )
 				print( e )
 
+			#On midnight, trigger global update
+			if date.today() != last_global_update:
+				last_global_update = date.today()
+				t = subscription_manager(slack_client, '', None, None, global_update = True )
+				t.start()
+				open_threads.append( t )
+
 			if command and channel:
 				#Replace odd ” with "
 				command = command.replace( '”' , '"' )
 
 				print( str( datetime.now() ), ': got a commmand in channel', channel, ':' , command ) 
 				if len(open_threads)+len(open_processes) <= botconfig.MAX_PARALLEL_REQUESTS:	
-						t = None										
+						t = None
 						if 'help' in command.lower():
 							t = return_help(slack_client, command, channel)
 						elif 'review-status' in command.lower():							
@@ -1112,6 +1128,8 @@ if __name__ == '__main__':
 							t = neurondb_manager(slack_client, command, channel, user)
 						elif 'subscription' in command.lower():
 							t = subscription_manager(slack_client, command, channel, user)
+						#elif 'global' in command.lower():
+						#	t = subscription_manager(slack_client, '', None, None, global_update = True )
 						elif 'nblast' in command.lower():
 							
 							#For some odd reason, threading does not prevent freezing while waiting R code to return nblast results
