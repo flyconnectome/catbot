@@ -74,33 +74,39 @@ class subscription_manager(threading.Thread):
 		#IDEA: USE MEASUREMENT API INSTEAD!? -> should be much faster!?
 
 		new_data = {}		
-
+		print('Extracting data...')
 		#Extract data
-		for i,s in enumerate(skids):			
-			list_of_childs = { n[0] : [ e[0] for e in skdata[i][0] if e[1] == n[0] ] for n in skdata[i][0] }
+		for i,s in enumerate(skids):					
+			print('Generating list of childs...')
+			list_of_childs = { n[0] : [] for n in skdata[i][0] } 
+			for n in skdata[i][0]:
+				try:
+					list_of_childs[ n[1] ].append( n[0] )
+				except:
+					list_of_childs[None]=[None]
 
+			print('Counting ends')
 			if 'ends' in skdata[i][2]:
-				closed_ends  =  len( [ n for n in skdata[i][0] if n[0] in skdata[i][2]['ends'] ] )
+				closed_ends  =  len( skdata[i][2]['ends'] )
 			else:
 				closed_ends = 0
 
 			if 'uncertain_ends' in skdata[i][2]:
-				uncertain_ends  =  len( [ n for n in skdata[i][0] if n[0] in skdata[i][2]['uncertain_end'] ] )
+				uncertain_ends  =  len( skdata[i][2]['uncertain_end'] )
 			else:
 				uncertain_ends = 0
 
 			open_ends = len( skdata[i][0] ) - closed_ends - uncertain_ends
 
-			synaptic_partners = list( set ( list( connectivity['incoming'].keys() ) + list ( connectivity['outgoing'].keys() ) ) )
-
+			print('Working on synaptic partners')
 			#First collect all synaptically connected neurons
 			all_con = {}
-			for n in connectivity['incoming']:
+			for n in [e for e in connectivity['incoming'] if connectivity['incoming'][e]['num_nodes'] >= 500]:
 				if str(s) in connectivity['incoming'][n]['skids']:					
 					all_con[n] = { 'incoming' : '-', 
 									'outgoing' : '-'
 									}
-			for n in connectivity['outgoing']:
+			for n in [e for e in connectivity['outgoing'] if connectivity['outgoing'][e]['num_nodes'] >= 500]:
 				if str(s) in connectivity['outgoing'][n]['skids']:					
 					all_con[n] = { 'incoming' : '-', 
 									'outgoing' : '-'
@@ -798,27 +804,27 @@ class return_help(threading.Thread):
 			response += '3. Add `threshold=3` to filter partners for a minimum number of synapses\n'		
 		elif 'nblast' in self.command:
 			response = '`nblast` blasts the provided neuron against the flycircuit database. Use the following optional arguments to refine: \n'
-			response += '1. Use `nblast <neuron> *nomirror*` to prevent mirroring of neurons before nblasting (i.e. if cellbody is already on the flys left). \n'
-			response += '2. Use `nblast <neuron> *hits=N*` to return the top N hits in the 3D plot. Default is 3\n'
-			response += '3. Use `nblast <neuron> *gmrdb*` to nblast against Janelia  \n'		
-			response += '4. Use `nblast <neuron> *cores=N*` to set the number of CPU cores used to nblast. Default is 8\n'
+			response += '1. Use `nblast <neuron> nomirror` to prevent mirroring of neurons before nblasting (i.e. if cellbody is already on the flys left). \n'
+			response += '2. Use `nblast <neuron> hits=N` to return the top N hits in the 3D plot. Default is 3\n'
+			response += '3. Use `nblast <neuron> gmrdb` to nblast against Janelia  \n'		
+			response += '4. Use `nblast <neuron> cores=N` to set the number of CPU cores used to nblast. Default is 8\n'
 		elif 'neurondb' in self.command:
 			response = '`neurondb` lets you access and edit the neuron database. \n'
 			response += 'I am using skeleton IDs as unique identifiers -> you can search for names/annotations/etc but I need a SKID when you want to add/edit an entry! \n'
-			response += '1. Use `neurondb *list*` to get a list of all neurons in the database. \n'
-			response += '2. Use `neurondb *search* <tag1> <tag2> ...` to search for hits in the database. \n'			
-			response += '3. Use `neurondb *show* <single neuron>` to show a summary for those skeleton ids. \n'
-			response += '4. Use `neurondb *edit* <single neuron> name="MVP2" comments="awesome neuron"` to edit entries. \n'
+			response += '1. Use `neurondb list` to get a list of all neurons in the database. \n'
+			response += '2. Use `neurondb search <tag1> <tag2> ...` to search for hits in the database. \n'			
+			response += '3. Use `neurondb show <single neuron>` to show a summary for those skeleton ids. \n'
+			response += '4. Use `neurondb edit <single neuron> name="MVP2" comments="awesome neuron"` to edit entries. \n'
 			response += '   For list entries such as <comments> or <neuropils> you can use "comments=comment1;comment2;comment3" to add multiple entries at a time. \n'
 			response += '5. To delete specific comments/tags use e.g. `neurondb *delete* comments=<index>` to remove the <index> (e.g. 1 = first) comment. \n'
 		elif 'subscription' in self.command:
 			response = '`subscription` lets you flag neurons of interest and I will keep you informed when they are modified. \n'
 			response += 'By default you will automatically receive daily updates (in the morning) \n'
 			response += 'but you can use `update` at any time to get an unscheduled summary.'			
-			response += '1. Use `subscription *list*` to get a list of all neurons you are currently subscribed to. \n'
-			response += '2. Use `subscription *new* <neuron(s)>` to subscribe to neurons. \n'
-			response += '3. Use `subscription *update*` to get an unscheduled summary of changes. Unless you also provide <neurons>, you will get all subscriptions. \n'
-			response += '4. Use `subscription *delete* <neuron(s)>` to unsubscribe to neurons. \n'			
+			response += '1. Use `subscription list` to get a list of all neurons you are currently subscribed to. \n'
+			response += '2. Use `subscription new <neuron(s)>` to subscribe to neurons. \n'
+			response += '3. Use `subscription update` to get an unscheduled summary of changes. Unless you also provide <neurons>, you will get all subscriptions. \n'
+			response += '4. Use `subscription delete <neuron(s)>` to unsubscribe to neurons. \n'			
 		else:			
 			functions = [						
 						'`neurondb` : accesses the neuron database. Use `@catbot help neurondb` to learn more.',
