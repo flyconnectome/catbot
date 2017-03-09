@@ -53,7 +53,9 @@ Catbot will return a list of top hits and their nblast scores, and a .html file 
 <img src="https://cloud.githubusercontent.com/assets/7161148/23557599/76695c44-0028-11e7-94dd-a9bd6edbb746.png" alt="nblast_webGL_result" width="500">
 
 Optional arguments:
+
 `nomirror` to set mirror=F (default = T)
+
 `hits=N` to set number of hits to include in the 3D WebGL file (default = 3)
 
 ## License:
