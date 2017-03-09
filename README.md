@@ -38,6 +38,10 @@ SLACK_KEY = ''
 #Zotero credentials
 ZOT_KEY = ''
 ZOT_GRP_ID = ''
+
+#Nblast databases
+FLYCIRCUIT_DB = 'url to dpscanon.rds'
+JANELIA_GMR_DB = 'url to gmrdps.rds' 
 ```
 See [here](https://api.slack.com/bot-users) on how to setup bot_id and Slack key 
 
