@@ -2,7 +2,7 @@
 Python 3 Slack bot to interface with [CATMAID](https://github.com/catmaid/CATMAID) server, [NBLAST](https://github.com/jefferislab/nat.nblast) and [Zotero](https://www.zotero.org/). Based on [Slack's Python API](https://github.com/slackapi/python-slackclient) (see [here](https://slackapi.github.io/python-slackclient/) for documentation).
 
 # Quickstart 
-1. Download catbot.py
+1. Download catbot.py, botconfig.py and ffnblast.py
 2. Setup and configure botconfig.py (see below)
 3. Install dependencies
 4. Run catbot.py
