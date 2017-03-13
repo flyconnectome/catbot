@@ -21,11 +21,20 @@ import matplotlib.pyplot as plt
 import rpy2.robjects as robjects
 from slackclient import SlackClient
 from plotneuron import plotneuron
-from pymaid import CatmaidInstance, get_review, get_3D_skeleton, retrieve_partners, retrieve_names, skid_exists, retrieve_skids_by_name, retrieve_skids_by_annotation
 from tabulate import tabulate
 from rpy2.robjects.packages import importr
 from pyzotero import zotero
 from datetime import datetime, date
+from pymaid import 	CatmaidInstance, \
+					get_review, \
+					get_3D_skeleton, \
+					retrieve_partners, \
+					retrieve_names, \
+					skid_exists, \
+					retrieve_skids_by_name, \
+					retrieve_skids_by_annotation, \
+					get_annotations_from_list
+
 
 class subscription_manager(threading.Thread):
 	""" Class to procoess subscriptions to neurons	
@@ -55,37 +64,36 @@ class subscription_manager(threading.Thread):
 
 	def process_neurons( self, skids ):
 		"""
-		Updates neuron entries and returns differences to previous version in subscription database
+		Retrieves data for neurons from the CATMAID server and extracts relevant information
 
 		Parameters:
 		----------
-		overwrite_existing : if True, existing entries will be updated
+		skids : 	skeleton IDs to check
 
 		Returns:
 		-------		
-		changes : { skid: { value : [ old, new ] } }
+		changes : 	{ skid: { value : [ old, new ] } }
+		skdata :	skeleton data for all neurons (order as in <skids>)
 		"""		
 
 		#Retrieve relevant data from Catmaid server
 		neuron_names = retrieve_names( skids, remote_instance, project_id = botconfig.PROJECT_ID )
 		skdata = get_3D_skeleton( skids, remote_instance, project_id = botconfig.PROJECT_ID )
 		connectivity = retrieve_partners( skids, remote_instance, project_id = botconfig.PROJECT_ID )	
-
-		#IDEA: USE MEASUREMENT API INSTEAD!? -> should be much faster!?
+		annotations = get_annotations_from_list (skids, remote_instance, project_id = botconfig.PROJECT_ID )		
+		r_status = get_review(skids, remote_instance = remote_instance, project_id = botconfig.PROJECT_ID)	
 
 		new_data = {}		
 		print('Extracting data...')
 		#Extract data
-		for i,s in enumerate(skids):					
-			print('Generating list of childs...')
+		for i,s in enumerate(skids):								
 			list_of_childs = { n[0] : [] for n in skdata[i][0] } 
 			for n in skdata[i][0]:
 				try:
 					list_of_childs[ n[1] ].append( n[0] )
 				except:
 					list_of_childs[None]=[None]
-
-			print('Counting ends')
+			
 			if 'ends' in skdata[i][2]:
 				closed_ends  =  len( skdata[i][2]['ends'] )
 			else:
@@ -98,7 +106,11 @@ class subscription_manager(threading.Thread):
 
 			open_ends = len( skdata[i][0] ) - closed_ends - uncertain_ends
 
-			print('Working on synaptic partners')
+			try:
+				this_an = annotations[ str(s) ] 
+			except:
+				this_an = []
+			
 			#First collect all synaptically connected neurons
 			all_con = {}
 			for n in [e for e in connectivity['incoming'] if connectivity['incoming'][e]['num_nodes'] >= 500]:
@@ -132,10 +144,12 @@ class subscription_manager(threading.Thread):
 								'open_ends'				: open_ends,
 								'synaptic_partners'		: all_con,
 								'last_update'			: str( date.today() ),
-								'last_edited_by'		: 'unknown'
+								'last_edited_by'		: 'unknown',
+								'annotations'			: this_an,
+								'review_status'			: int( r_status[ str(s) ][1]/r_status[ str(s) ][0] * 100 )
 							}
 
-		return new_data
+		return new_data, skdata
 
 	def run(self):
 		"""
@@ -156,13 +170,15 @@ class subscription_manager(threading.Thread):
 															'upstream_partners'		: { skid: n_synapses },
 															'downstream_partners'	: { skid: n_synapses },
 															'last_update'			: timestamp_of_last_update,
-															'last_edited_by'		: user_id
+															'last_edited_by'		: user_id,
+															'annotations'			: list(),
+															'review_status'			: int()
 															}
 													 	}
 			}
 		}
 		"""		
-		basic_values = ['name','branch_points','n_nodes','pre_synapses','post_synapses','open_ends']		
+		basic_values = ['name','branch_points','n_nodes','pre_synapses','post_synapses','open_ends', 'review_status']		
 
 		print('Started new thread %i for command <%s> by user <%s>' % (self.id, self.command, self.user ) )
 
@@ -208,7 +224,7 @@ class subscription_manager(threading.Thread):
 				users[self.user]['subscriptions'] = list ( set( users[self.user]['subscriptions'] ) )
 				data['users'] = users
 
-				new_data = self.process_neurons( [ s for s in skids if s not in data['users'][self.user]['neurons'] ]  )				
+				new_data, skdata = self.process_neurons( [ s for s in skids if s not in data['users'][self.user]['neurons'] ]  )				
 				old_data = data['users']				
 				old_data[self.user]['neurons'].update( new_data )				
 				data['users'] = old_data
@@ -243,18 +259,26 @@ class subscription_manager(threading.Thread):
 			else:
 				response = 'Please provide me at least a single neuron to subscribe you to!'
 
+		#IDEA: PRINT CHANGES (+100, -100) instead of new/old?
+		#ADD CHANGES IN ANNOTATIONS
+		#MAKE SYNAPTIC PARTNERS CLICKY? like this: <http://www.zapier.com|Text to make into a link>
+
 		if 'update' in self.command or self.global_update is True:
 			print('Pushing updates')
 			if self.global_update is True:				
 				users_to_notify = [ u for u in data['users'] if data['users'][u]['daily_updates'] is True ]
 				print('Global update!', users_to_notify)
-				neurons_in_db = []
+				neurons_to_process = []
 				for u in data['users']:
-					neurons_in_db += [ n for n in data['users'][u]['neurons'] ]
-				new_data = self.process_neurons ( neurons_in_db )
+					neurons_to_process += [ n for n in data['users'][u]['neurons'] ]				
 			else:
+				ts = self.slack_client.api_call("chat.postMessage", channel='@' + self.user,
+									text='Got it! Collecting intel - please wait...', as_user=True)['ts']
 				users_to_notify = [ self.user ]
-				new_data = self.process_neurons ( data['users'][self.user]['subscriptions'] ) 
+				neurons_to_process = data['users'][self.user]['subscriptions']
+			
+			#Gather new data here - this costs time!
+			new_data,skdata = self.process_neurons ( neurons_to_process ) 			
 
 			for u in users_to_notify:
 				not_changed = []
@@ -264,15 +288,23 @@ class subscription_manager(threading.Thread):
 				else:
 					neurons_to_update = skids
 
-				for n in neurons_to_update:
+				for n in neurons_to_update:					
 					#Changes are sorted into basic values and more complicated stuff (i.e. synaptic partners)
 					changes = { 
 								'basic': {},
-								'synaptic_partners': {}
+								'synaptic_partners': {},
+								'new_annotations': [],
+								'annotations': { 	'new': [],
+													'gone': [] 
+													}
 								}
 
 					#Search for change in basic values
 					for e in basic_values:
+						#If value is new, skip it for now and just write it back
+						if e not in data['users'][u]['neurons'][n]:
+							continue
+
 						if new_data[n][e] != data['users'][u]['neurons'][n][e]:
 							changes['basic'][e] = [ new_data[n][e] , data['users'][u]['neurons'][n][e] ]
 
@@ -293,16 +325,38 @@ class subscription_manager(threading.Thread):
 						except:
 							changes['synaptic_partners'][e] = [ {'incoming':'-', 'outgoing': '- '} , data['users'][u]['neurons'][n]['synaptic_partners'][e] ]
 
+					try:
+						#Find new annotations
+						for e in new_data[n]['annotations']:												
+							if e not in data['users'][u]['neurons'][n]['annotations']:
+								changes['annotations']['new'].append(e)
+
+						#Find annotations that have vanished:					
+						for e in data['users'][u]['neurons'][n]['annotations']:
+							if e not in new_data[n]['annotations']:
+								changes['annotations']['gone'].append(e)
+					except:
+						#E.g. if annotations have not yet been tracked in the old dataset
+						pass
+
 					#If changes have been found, generate response 
-					if changes['basic'] or changes['synaptic_partners']:
-						response += '%s - #%s (changes since %s) \n```' % ( new_data[n]['name'] ,str(n), data['users'][u]['neurons'][n]['last_update'] )
+					if changes['basic'] or changes['synaptic_partners'] or changes['annotations']['new'] or changes['annotations']['gone']:						
+						root = [nd for nd in skdata[ neurons_to_process.index(n) ][0] if nd[1] == None][0]
+						url = remote_instance.url_to_coordinates( botconfig.PROJECT_ID , root[3:6] , stack_id = 5, tool = 'tracingtool' , active_skeleton_id = n, active_node_id = root[0] )						
+						link = '<' + url + '|' + new_data[n]['name'] + '>'
+						response += '%s - #%s (changes since %s) \n```' % ( link , str(n), data['users'][u]['neurons'][n]['last_update'] )
 					else:
 						not_changed.append(n)
+
 					#Basic values first
 					if changes['basic']:						
 						if True in [ e in changes['basic'] for e in basic_values ]:							
 							table = [ [ 'Value', 'New', 'Old' ] ] + [ [ e, changes['basic'][e][0], changes['basic'][e][1] ] for e in basic_values if e in changes['basic'] ] 
 							response += tabulate(table) + '\n'
+					if changes['annotations']['new']:											
+						response += 'New annotations: %s \n' % '; '.join(changes['annotations']['new'])
+					if changes['annotations']['gone']:											
+						response += 'Deleted annotations: %s \n' % '; '.join(changes['annotations']['gone'])
 					#Now connectivity
 					if changes['synaptic_partners']:
 						partner_names = retrieve_names( list( changes['synaptic_partners'].keys() ), remote_instance )
@@ -311,14 +365,12 @@ class subscription_manager(threading.Thread):
 						partner_names.update( { e:'not found' for e in list( changes['synaptic_partners'].keys() ) if e not in partner_names } )
 
 						response += 'Synaptic partners:\n'
-
-						print('changes:',changes['synaptic_partners'])
-						print(partner_names)
+						
 						table = [ [ 'Name', 'SKID', 'Synapses from (new/old)', 'Synapses to (new/old)' ] ] 
 						table += [ [ partner_names[e], e, str(changes['synaptic_partners'][e][0]['incoming'])+'/'+str(changes['synaptic_partners'][e][1]['incoming']), str(changes['synaptic_partners'][e][0]['outgoing'])+'/'+str(changes['synaptic_partners'][e][1]['outgoing']),   ] for e in changes['synaptic_partners'] ] 
 						response += tabulate(table) + '\n'
 
-					if changes['basic'] or changes['synaptic_partners']:
+					if changes['basic'] or changes['synaptic_partners'] or changes['annotations']['new'] or changes['annotations']['gone']:	
 						response += '```\n'							
 
 				if response:
@@ -469,7 +521,7 @@ class return_plot_neuron(threading.Thread):
 				self.slack_client.api_call("files.upload", 	channels=self.channel, 
 														file = f,
 														title = 'Neuron plot',
-														initial_comment = 'Neurons #%s' % ' #'.join(skids)
+														initial_comment = 'Neurons #%s' % ' #'.join([str(s) for s in skids])
 														 )
 
 			response = ''
@@ -1042,8 +1094,8 @@ def parse_slack_output(slack_rtm_output, user_list):
     if output_list and len(output_list) > 0:
         for output in output_list:
             if output and 'text' in output and botconfig.AT_BOT in output['text']:
-                # return text after the @ mention, whitespace removed
-                print('Message from', [ e['name'] for e in user_list['members'] if e['id'] == output['user'] ], ':', output['text'] )
+                # return text after the @ mention, whitespace removed                
+                print('Message from', [ e['name'] for e in user_list['members'] if e['id'] == output['user'] ] , output['user'] , ':', output['text'] )
                 return output['text'].split(botconfig.AT_BOT)[1].strip(), \
                        output['channel'], \
                        [ e['name'] for e in user_list['members'] if e['id'] == output['user'] ][0]                       
@@ -1099,12 +1151,14 @@ if __name__ == '__main__':
 
 	if slack_client.rtm_connect():
 		print("Pybot connected and running!")
+		errors = set()
 		while True:
 			try:
 				command, channel, user = parse_slack_output( slack_client.rtm_read(), user_list )
 			except BaseException as e:
+				errors.add( str(e) )
 				print('Error parsing slack output %s:' % str( datetime.now() ) )
-				print( e )
+				print( errors )
 
 			#On midnight, trigger global update
 			if date.today() != last_global_update:
