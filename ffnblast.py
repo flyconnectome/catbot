@@ -51,6 +51,7 @@ if __name__ == '__main__':
 	elmr = importr('elmr')
 	fc = importr('flycircuit')		
 	domc = importr('doMC')
+	rjson = importr('rjson')
 	cores = robjects.r('registerDoMC(%i)' % cores)	
 	vfbr = importr('vfbr')
 
