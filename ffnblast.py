@@ -125,13 +125,12 @@ if __name__ == '__main__':
 										)
 
 	if db == 'fc':
-		table = [ ['*Gene Name*','*Score*','*MuScore*','*Driver*','*Gender*','*VFB*','*Hit No.*'] ]	
-		
+		table = [ ['*Gene Name*','*Score*','*MuScore*','*Driver*','*Gender*','*VFB*','*Hit No.*'] ]			
 		fc_urls = {}
 		vfb_urls = {}
 		for e in s:
 			neuron_name = fc_neuron(e['name'])[0]
-			vfb_id = vfb_tovfbids(neuron_name)[0]		
+			vfb_id = vfb_tovfbids(neuron_name)[0]					
 			fc_urls[neuron_name] = 'http://flycircuit.tw/flycircuitSourceData/NeuronData/%s/%s_lsm.png' % (neuron_name,neuron_name)
 			vfb_urls[vfb_id] = 'http://www.virtualflybrain.org/site/stacks/index.htm?id=%s' % vfb_id 
 			table.append ( [ e['name'], round(e['score'],3) , round(e['muscore'],3) , e['Driver'], e['Gender'], vfb_id, e['n']  ] )
@@ -139,8 +138,11 @@ if __name__ == '__main__':
 		table = [ ['*Name*','*Score*','*MuScore*','*VFB*','*Hit No.*'] ]	
 		vfb_urls = {}
 		for e in s:				
-			vfb_id = gmr_vfbid(e['name'])[0]					
-			vfb_urls[vfb_id] = 'http://www.virtualflybrain.org/site/stacks/index.htm?id=%s' % vfb_id 
+			vfb_id = gmr_vfbid(e['name'])[0]	
+			if type(vfb_id) == type( str() ):				
+				vfb_urls[vfb_id] = 'http://www.virtualflybrain.org/site/stacks/index.htm?id=%s' % vfb_id 
+			else:
+				vfb_id = 'N/A'				 
 			table.append ( [ e['name'], round(e['score'],3) , round(e['muscore'],3) , vfb_id, e['n']  ] )		
 
 	tab = tabulate(table)
