@@ -9,12 +9,19 @@ Python 3 Slack bot to interface with [CATMAID](https://github.com/catmaid/CATMAI
 5. In Slack use `@catbot help` to get a list of possible commands
 
 # Dependencies 
+## Python
 [slack_client](https://github.com/slackapi/python-slackclient),
 [matplotlib](http://matplotlib.org/),
 [pymaid](https://github.com/schlegelp/pymaid),
 [tabulate](https://github.com/gregbanks/python-tabulate),
 [rpy2](https://rpy2.readthedocs.io/en/version_2.8.x/),
 [pyzotero](https://github.com/urschrei/pyzotero)
+
+## R
+[elmr](https://github.com/jefferis/elmr),
+[flycircuit](https://github.com/jefferis/flycircuit),
+[vfbr](https://github.com/jefferis/vfbr),
+[doMC](https://cran.r-project.org/web/packages/doMC/index.html)
 
 # Configuration
 botconfig.py needs to hold credentials for CATMAID server, Slack and Zotero (optional)
@@ -48,9 +55,9 @@ See [here](https://api.slack.com/bot-users) on how to setup bot_id and Slack key
 See [here](https://github.com/urschrei/pyzotero) on Zotero keys and grp ids.
 
 # Using catbot to NBLAST
-Use `@catbot nblast #skid` to have catbot perform a nblast search. This relies on R being installed and configured to use [elmr](https://github.com/jefferis/elmr) and its dependencies.
+Use `@catbot nblast #skid` to have catbot perform a nblast search. This relies on R being installed and configured to use [elmr](https://github.com/jefferis/elmr) and its dependencies. Please make sure that you can run e.g. the example in `?nblast_fafb`
 
-Catbot will return a list of top hits and their nblast scores, and a .html file containing a WebGL rendering of the first few hits (see screenshot).
+Catbot will return a list of top hits and their nblast scores plus a .html file containing a WebGL rendering of the first few hits (see screenshot).
 
 ![nblast_example](https://cloud.githubusercontent.com/assets/7161148/23308336/ce5682be-faa2-11e6-9400-6bdb369f1b15.png)
 
