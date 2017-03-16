@@ -138,9 +138,8 @@ if __name__ == '__main__':
 	else:
 		table = [ ['*Name*','*Score*','*MuScore*','*VFB*','*Hit No.*'] ]	
 		vfb_urls = {}
-		for e in s:	
-			neuron_name = fc_neuron(e['name'])[0]
-			vfb_id = gmr_vfbid(neuron_name)[0]					
+		for e in s:				
+			vfb_id = gmr_vfbid(e['name'])[0]					
 			vfb_urls[vfb_id] = 'http://www.virtualflybrain.org/site/stacks/index.htm?id=%s' % vfb_id 
 			table.append ( [ e['name'], round(e['score'],3) , round(e['muscore'],3) , vfb_id, e['n']  ] )		
 
