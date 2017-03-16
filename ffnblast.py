@@ -53,6 +53,7 @@ if __name__ == '__main__':
 	domc = importr('doMC')
 	cores = robjects.r('registerDoMC(%i)' % cores)
 	rjson = importr('rjson')
+	vfbr = importr('vfbr')
 
 	#Make sure variables for databases are set correctly
 	login = robjects.r('options(catmaid.server="%s", catmaid.authname="%s",catmaid.authpassword="%s", catmaid.token="%s")' % ( botconfig.SERVER_URL, botconfig.HTTP_USER, botconfig.HTTP_PW, botconfig.AUTHTOKEN ) )
@@ -72,6 +73,7 @@ if __name__ == '__main__':
 	toJSON = robjects.r('toJSON')
 	row_names = robjects.r('row.names')
 	fc_neuron = robjects.r('fc_neuron')
+	vfb_tovfbids = robjects.r('vfb_tovfbids')
 
 	print('Blasting - please wait...')	
 
@@ -121,18 +123,20 @@ if __name__ == '__main__':
 										ts = ts
 										)
 
-	table = [ ['*Gene Name*','*Score*','*MuScore*','*Driver*','*Gender*','*FlyCircuit*','*Hit No.*'] ]	
-	urls = {}
-
+	table = [ ['*Gene Name*','*Score*','*MuScore*','*Driver*','*Gender*','*VFB*','*Hit No.*'] ]	
+	
+	fc_urls = {}
+	vfb_urls = {}
 	for e in s:	
 		neuron_name = fc_neuron(e['name'])[0]
-		#links like this: <http://www.zapier.com|Text to make into a link>
-		urls[neuron_name] = 'http://flycircuit.tw/flycircuitSourceData/NeuronData/%s/%s_lsm.png' % (neuron_name,neuron_name)
-		table.append ( [ e['name'], round(e['score'],3) , round(e['muscore'],3) , e['Driver'], e['Gender'], neuron_name, e['n']  ] )		
+		vfb_id = vfb_tovfbids(neuron_name)[0]		
+		fc_urls[neuron_name] = 'http://flycircuit.tw/flycircuitSourceData/NeuronData/%s/%s_lsm.png' % (neuron_name,neuron_name)
+		vfb_urls[vfb_id] = 'http://www.virtualflybrain.org/site/stacks/index.htm?id=%s' % vfb_id 
+		table.append ( [ e['name'], round(e['score'],3) , round(e['muscore'],3) , e['Driver'], e['Gender'], vfb_id, e['n']  ] )		
 
 	tab = tabulate(table)
-	for name in urls:
-		tab = tab.replace( name , '<%s|%s>' % ( urls[name], name ) )	
+	for vfb_id in vfb_urls:
+		tab = tab.replace( vfb_id , '<%s|%s>' % ( vfb_urls[vfb_id], vfb_id ) )	
 
 	slack_client.api_call("chat.postMessage", channel=channel, text= '```'+tab+'```', as_user=True)
 
