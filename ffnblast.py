@@ -36,6 +36,7 @@ if __name__ == '__main__':
 	mirror = bool( int( sys.argv[3]) )
 	hits = int(sys.argv[4])
 	db = sys.argv[5]
+	cores = int(sys.argv[6])
 	reverse = False
 
 	#Initialize slack client from botconfig.py
@@ -50,7 +51,7 @@ if __name__ == '__main__':
 	elmr = importr('elmr')
 	fc = importr('flycircuit')		
 	domc = importr('doMC')
-	cores = robjects.r('registerDoMC(8)')
+	cores = robjects.r('registerDoMC(%i)' % cores)
 	rjson = importr('rjson')
 
 	#Make sure variables for databases are set correctly
@@ -119,14 +120,14 @@ if __name__ == '__main__':
 										ts = ts
 										)
 
-	table = [ ['*Name*','*Score*','*MuScore*','*Driver*','*Gender*' ] ]	
+	table = [ ['*Name*','*Score*','*MuScore*','*Driver*','*Gender*','*Hit No.*' ] ]	
 
 	for e in s:				
-		table.append ( [ e['name'], round(e['score'],3) , round(e['muscore'],3) , e['Driver'], e['Gender'] ] )			
+		table.append ( [ e['name'], round(e['score'],3) , round(e['muscore'],3) , e['Driver'], e['Gender'], e['n'] ] )			
 
 	slack_client.api_call("chat.postMessage", channel=channel, text= '```'+tabulate(table)+'```', as_user=True)
 
-	with open('webGL/index.html', 'rb') as f:
+	with open('webGL/index.html', 'r') as f:
 		slack_client.api_call("files.upload", 	channels=channel, 
 												file = f,
 												title = '3D nblast results for neuron #%s' % skid,
