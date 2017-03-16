@@ -51,8 +51,7 @@ if __name__ == '__main__':
 	elmr = importr('elmr')
 	fc = importr('flycircuit')		
 	domc = importr('doMC')
-	cores = robjects.r('registerDoMC(%i)' % cores)
-	rjson = importr('rjson')
+	cores = robjects.r('registerDoMC(%i)' % cores)	
 	vfbr = importr('vfbr')
 
 	#Make sure variables for databases are set correctly
@@ -74,6 +73,7 @@ if __name__ == '__main__':
 	row_names = robjects.r('row.names')
 	fc_neuron = robjects.r('fc_neuron')
 	vfb_tovfbids = robjects.r('vfb_tovfbids')
+	gmr_vfbid = robjects.r('gmr_vfbid')
 
 	print('Blasting - please wait...')	
 
@@ -123,16 +123,25 @@ if __name__ == '__main__':
 										ts = ts
 										)
 
-	table = [ ['*Gene Name*','*Score*','*MuScore*','*Driver*','*Gender*','*VFB*','*Hit No.*'] ]	
-	
-	fc_urls = {}
-	vfb_urls = {}
-	for e in s:	
-		neuron_name = fc_neuron(e['name'])[0]
-		vfb_id = vfb_tovfbids(neuron_name)[0]		
-		fc_urls[neuron_name] = 'http://flycircuit.tw/flycircuitSourceData/NeuronData/%s/%s_lsm.png' % (neuron_name,neuron_name)
-		vfb_urls[vfb_id] = 'http://www.virtualflybrain.org/site/stacks/index.htm?id=%s' % vfb_id 
-		table.append ( [ e['name'], round(e['score'],3) , round(e['muscore'],3) , e['Driver'], e['Gender'], vfb_id, e['n']  ] )		
+	if db == 'fc':
+		table = [ ['*Gene Name*','*Score*','*MuScore*','*Driver*','*Gender*','*VFB*','*Hit No.*'] ]	
+		
+		fc_urls = {}
+		vfb_urls = {}
+		for e in s:
+			neuron_name = fc_neuron(e['name'])[0]
+			vfb_id = vfb_tovfbids(neuron_name)[0]		
+			fc_urls[neuron_name] = 'http://flycircuit.tw/flycircuitSourceData/NeuronData/%s/%s_lsm.png' % (neuron_name,neuron_name)
+			vfb_urls[vfb_id] = 'http://www.virtualflybrain.org/site/stacks/index.htm?id=%s' % vfb_id 
+			table.append ( [ e['name'], round(e['score'],3) , round(e['muscore'],3) , e['Driver'], e['Gender'], vfb_id, e['n']  ] )
+	else:
+		table = [ ['*Name*','*Score*','*MuScore*','*VFB*','*Hit No.*'] ]	
+		vfb_urls = {}
+		for e in s:	
+			neuron_name = fc_neuron(e['name'])[0]
+			vfb_id = gmr_vfbid(neuron_name)[0]					
+			vfb_urls[vfb_id] = 'http://www.virtualflybrain.org/site/stacks/index.htm?id=%s' % vfb_id 
+			table.append ( [ e['name'], round(e['score'],3) , round(e['muscore'],3) , vfb_id, e['n']  ] )		
 
 	tab = tabulate(table)
 	for vfb_id in vfb_urls:
