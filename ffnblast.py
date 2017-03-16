@@ -71,6 +71,7 @@ if __name__ == '__main__':
 	summary = robjects.r('summary')
 	toJSON = robjects.r('toJSON')
 	row_names = robjects.r('row.names')
+	fc_neuron = robjects.r('fc_neuron')
 
 	print('Blasting - please wait...')	
 
@@ -120,12 +121,20 @@ if __name__ == '__main__':
 										ts = ts
 										)
 
-	table = [ ['*Name*','*Score*','*MuScore*','*Driver*','*Gender*','*Hit No.*' ] ]	
+	table = [ ['*Gene Name*','*Score*','*MuScore*','*Driver*','*Gender*','*FlyCircuit*','*Hit No.*'] ]	
+	urls = {}
 
-	for e in s:				
-		table.append ( [ e['name'], round(e['score'],3) , round(e['muscore'],3) , e['Driver'], e['Gender'], e['n'] ] )			
+	for e in s:	
+		neuron_name = fc_neuron(e['name'])[0]
+		#links like this: <http://www.zapier.com|Text to make into a link>
+		urls[neuron_name] = 'http://flycircuit.tw/flycircuitSourceData/NeuronData/%s/%s_lsm.png' % (neuron_name,neuron_name)
+		table.append ( [ e['name'], round(e['score'],3) , round(e['muscore'],3) , e['Driver'], e['Gender'], neuron_name, e['n']  ] )		
 
-	slack_client.api_call("chat.postMessage", channel=channel, text= '```'+tabulate(table)+'```', as_user=True)
+	tab = tabulate(table)
+	for name in urls:
+		tab = tab.replace( name , '<%s|%s>' % ( urls[name], name ) )	
+
+	slack_client.api_call("chat.postMessage", channel=channel, text= '```'+tab+'```', as_user=True)
 
 	with open('webGL/index.html', 'r') as f:
 		slack_client.api_call("files.upload", 	channels=channel, 
