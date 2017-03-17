@@ -110,9 +110,9 @@ if __name__ == '__main__':
 	plot3d = robjects.r( 'plot3d')
 	writeWebGL = robjects.r( 'writeWebGL' )
 	if db == 'fc':
-		plot3d( res , hits = robjects.IntVector( range( hits + 1 ) ), db = fcdps )
+		plot3d( res , hits = robjects.IntVector( range( hits + 1 ) ), db = fcdps , soma = True)
 	elif db == 'gmr':
-		plot3d( res , hits = robjects.IntVector( range( hits + 1 ) ), db = gmrdps )
+		plot3d( res , hits = robjects.IntVector( range( hits + 1 ) ), db = gmrdps, soma = True )
 
 	writeWebGL( 'webGL', width = 1000 )
 	robjects.r('rgl.close()')
@@ -129,6 +129,7 @@ if __name__ == '__main__':
 		fc_urls = {}
 		vfb_urls = {}
 		for e in s:
+			#e['name'] is gene name -> use fc_neuron to get neuron name
 			neuron_name = fc_neuron(e['name'])[0]
 			vfb_id = vfb_tovfbids(neuron_name)[0]					
 			fc_urls[neuron_name] = 'http://flycircuit.tw/flycircuitSourceData/NeuronData/%s/%s_lsm.png' % (neuron_name,neuron_name)

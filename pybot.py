@@ -1151,14 +1151,17 @@ if __name__ == '__main__':
 
 	if slack_client.rtm_connect():
 		print("Pybot connected and running!")
-		errors = set()
 		while True:
 			try:
 				command, channel, user = parse_slack_output( slack_client.rtm_read(), user_list )
-			except BaseException as e:
-				errors.add( str(e) )
-				print('Error parsing slack output %s:' % str( datetime.now() ) )
-				print( errors )
+			except WebSocketConnectionClosedException as e:
+				print(e)
+				print (str( datetime.now() ),'Caught websocket disconnect, reconnecting...')
+				time.sleep(botconfig.READ_WEBSOCKET_DELAY)
+				slack_client.rtm_connect()
+			except Exception as e:
+				print(e)
+				print(str( datetime.now() ),'Error parsing slack output')
 
 			#On midnight, trigger global update
 			if date.today() != last_global_update:
