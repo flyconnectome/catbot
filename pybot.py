@@ -507,7 +507,59 @@ class return_plot_neuron(threading.Thread):
 			ts = self.slack_client.api_call("chat.postMessage", channel=self.channel,
 									text='Got it! Generating plot - please wait...', as_user=True)['ts']
 
-			fig, ax = plotneuron(skids, remote_instance, 'brain')
+			args = ['brain']
+			kwargs = {}
+
+			if 'lh' in self.command:
+				args.append('lh')
+			if 'al' in self.command:
+				args.append('al')
+			if 'sip' in self.command:
+				args.append('sip')
+			if 'slp' in self.command:
+				args.append('slp')
+			if 'mb' in self.command:
+				args.append('mb')
+			if 'cre' in self.command:
+				args.append('cre')
+
+			if re.search('brain=((.*))',self.command):
+				tup = re.search('brain=\((.*)\)',self.command).group(1) 
+				kwargs['brain'] =  [float(e) for e in tup.split(',')]
+			if re.search('lh=((.*))',self.command):
+				tup = re.search('lh=\((.*)\)',self.command).group(1) 
+				kwargs['lh'] =  [float(e) for e in tup.split(',')]
+			if re.search('al=((.*))',self.command):
+				tup = re.search('al=\((.*)\)',self.command).group(1) 
+				kwargs['al'] =  [float(e) for e in tup.split(',')]
+			if re.search('sip=((.*))',self.command):
+				tup = re.search('sip=\((.*)\)',self.command).group(1) 
+				kwargs['sip'] =  [float(e) for e in tup.split(',')]
+			if re.search('slp=((.*))',self.command):
+				tup = re.search('slp=\((.*)\)',self.command).group(1) 
+				kwargs['slp'] =  [float(e) for e in tup.split(',')]
+			if re.search('mb=((.*))',self.command):
+				tup = re.search('mb=\((.*)\)',self.command).group(1) 
+				kwargs['mb'] =  [float(e) for e in tup.split(',')]
+			if re.search('cre=((.*))',self.command):
+				tup = re.search('cre=\((.*)\)',self.command).group(1) 
+				kwargs['cre'] =  [float(e) for e in tup.split(',')]
+
+			#This is for cheating - will just give some faint color to all neuropils
+			if 'color_neuropils' in self.command:
+				kwargs = { 	
+							'lh':(.8,.8,.9),
+							'mb':(.8,.9,.9),
+							'al':(.9,.8,.9),
+							'cre':(.7,.9,.7),
+							'sip':(.9,.9,.7),
+							'slp':(.9,.8,.8), 
+							'brain':(.9,.9,.9)
+							}
+
+
+			fig, ax = plotneuron(skids, remote_instance, *args, **kwargs)
+
 			if len(skids) > 1:
 				plt.legend()
 			plt.savefig( 'renderings/neuron_plot.png', transparent = False )
@@ -858,7 +910,7 @@ class return_help(threading.Thread):
 			response = '`nblast` blasts the provided neuron against the flycircuit database. Use the following optional arguments to refine: \n'
 			response += '1. Use `nblast <neuron> nomirror` to prevent mirroring of neurons before nblasting (i.e. if cellbody is already on the flys left). \n'
 			response += '2. Use `nblast <neuron> hits=N` to return the top N hits in the 3D plot. Default is 3\n'
-			response += '3. Use `nblast <neuron> gmrdb` to nblast against Janelia  \n'		
+			response += '3. Use `nblast <neuron> gmrdb` to nblast against Janelia GMR lines  \n'		
 			response += '4. Use `nblast <neuron> cores=N` to set the number of CPU cores used to nblast. Default is 8\n'
 		elif 'neurondb' in self.command:
 			response = '`neurondb` lets you access and edit the neuron database. \n'
@@ -876,13 +928,18 @@ class return_help(threading.Thread):
 			response += '1. Use `subscription list` to get a list of all neurons you are currently subscribed to. \n'
 			response += '2. Use `subscription new <neuron(s)>` to subscribe to neurons. \n'
 			response += '3. Use `subscription update` to get an unscheduled summary of changes. Unless you also provide <neurons>, you will get all subscriptions. \n'
-			response += '4. Use `subscription delete <neuron(s)>` to unsubscribe to neurons. \n'			
+			response += '4. Use `subscription delete <neuron(s)>` to unsubscribe to neurons. \n'		
+		elif 'plot' in self.command:
+			response = '`plot` lets you plot neurons of interest.  \n'
+			response += '1. Use `nblast <neuron(s)> neuropil1 neuropil2` to make me plot neuropils. \n'
+			response += '2. Use `nblast <neuron(s)> neuropil1=(r,g,b) neuropil2=(r,g,b)` to give neuropils specific colors (`r`,`g`,`b` must be range 0-1). \n'
+			response += 'Currently, I can offer these neuropils: `MB`,`SIP`,`AL`,`CRE`,`SLP`,`LH` \n'				
 		else:			
 			functions = [						
 						'`neurondb` : accesses the neuron database. Use `@catbot help neurondb` to learn more.',
 						'`subscribe` : accesses the subscription system. Use `@catbot help subscription` to learn more.',
 						'`review-status <neurons>` : give me a list of neurons and I will tell you their review status.',
-						'`plot <neurons>` : give me a list of neurons to plot.',
+						'`plot <neurons>` : give me a list of neurons to plot. Use `@catbot help plot` to learn about how to show neuropils.',
 						'`url <neurons>` : give me a list of neurons and I will generate urls to their root nodes.',
 						'`nblast <neuron>` : give me a *single* neuron and let me run an nblast search. Use `@catbot help nblast` to learn more.',
 						'`zotero TAG1 TAG2 TAG3` : give me tags and I will search our Zotero group for you',
