@@ -531,13 +531,13 @@ class return_plot_neuron(threading.Thread):
 				kwargs['lh'] =  [float(e) for e in tup.split(',')]
 			if re.search('al=((.*))',self.command):
 				tup = re.search('al=\((.*)\)',self.command).group(1) 
-				kwargs['al'] =  [float(e) for e in tup.split(',')]
-			if re.search('sip=((.*))',self.command):
-				tup = re.search('sip=\((.*)\)',self.command).group(1) 
-				kwargs['sip'] =  [float(e) for e in tup.split(',')]
+				kwargs['al'] =  [float(e) for e in tup.split(',')]			
 			if re.search('slp=((.*))',self.command):
 				tup = re.search('slp=\((.*)\)',self.command).group(1) 
 				kwargs['slp'] =  [float(e) for e in tup.split(',')]
+			if re.search('sip=((.*))',self.command):
+				tup = re.search('sip=\((.*)\)',self.command).group(1) 
+				kwargs['sip'] =  [float(e) for e in tup.split(',')]
 			if re.search('mb=((.*))',self.command):
 				tup = re.search('mb=\((.*)\)',self.command).group(1) 
 				kwargs['mb'] =  [float(e) for e in tup.split(',')]
@@ -562,7 +562,7 @@ class return_plot_neuron(threading.Thread):
 
 			if len(skids) > 1:
 				plt.legend()
-			plt.savefig( 'renderings/neuron_plot.png', transparent = False )
+			plt.savefig( 'renderings/neuron_plot.png', transparent = False, dpi=300 )
 
 			self.slack_client.api_call(	"chat.delete",
 										channel = self.channel,
@@ -907,11 +907,13 @@ class return_help(threading.Thread):
 			response += '2. Add `filter="tag1,tag2"` to filter results for neuron names (case-insensitive, non-intersecting)\n'
 			response += '3. Add `threshold=3` to filter partners for a minimum number of synapses\n'		
 		elif 'nblast' in self.command:
-			response = '`nblast` blasts the provided neuron against the flycircuit database. Use the following optional arguments to refine: \n'
+			response = '`nblast` blasts the provided neuron against the flycircuit database. Use combinations of the following optional arguments to refine: \n'
 			response += '1. Use `nblast <neuron> nomirror` to prevent mirroring of neurons before nblasting (i.e. if cellbody is already on the flys left). \n'
 			response += '2. Use `nblast <neuron> hits=N` to return the top N hits in the 3D plot. Default is 3\n'
 			response += '3. Use `nblast <neuron> gmrdb` to nblast against Janelia GMR lines  \n'		
 			response += '4. Use `nblast <neuron> cores=N` to set the number of CPU cores used to nblast. Default is 8\n'
+			response += '5. Use `nblast <neuron> prefermu` to sort hits by reverse score (muscore) rather than forward score\n'
+			response += '6. Use `nblast <neuron> usealpha` to make nblast value backbones higher than smaller neurites\n'			
 		elif 'neurondb' in self.command:
 			response = '`neurondb` lets you access and edit the neuron database. \n'
 			response += 'I am using skeleton IDs as unique identifiers -> you can search for names/annotations/etc but I need a SKID when you want to add/edit an entry! \n'
@@ -928,12 +930,12 @@ class return_help(threading.Thread):
 			response += '1. Use `subscription list` to get a list of all neurons you are currently subscribed to. \n'
 			response += '2. Use `subscription new <neuron(s)>` to subscribe to neurons. \n'
 			response += '3. Use `subscription update` to get an unscheduled summary of changes. Unless you also provide <neurons>, you will get all subscriptions. \n'
-			response += '4. Use `subscription delete <neuron(s)>` to unsubscribe to neurons. \n'		
+			response += '4. Use `subscription delete <neuron(s)>` to unsubscribe to neurons. \n'
 		elif 'plot' in self.command:
 			response = '`plot` lets you plot neurons of interest.  \n'
 			response += '1. Use `nblast <neuron(s)> neuropil1 neuropil2` to make me plot neuropils. \n'
 			response += '2. Use `nblast <neuron(s)> neuropil1=(r,g,b) neuropil2=(r,g,b)` to give neuropils specific colors (`r`,`g`,`b` must be range 0-1). \n'
-			response += 'Currently, I can offer these neuropils: `MB`,`SIP`,`AL`,`CRE`,`SLP`,`LH` \n'				
+			response += 'Currently, I can offer these neuropils: `MB`,`SIP`,`AL`,`CRE`,`SLP`,`LH` \n'
 		else:			
 			functions = [						
 						'`neurondb` : accesses the neuron database. Use `@catbot help neurondb` to learn more.',
@@ -1262,8 +1264,12 @@ if __name__ == '__main__':
 										response = "I'm sorry - the neuron #%s does not seem to exists. Please try again." % skids[0]
 										slack_client.api_call("chat.postMessage", channel=channel,
 							                          text=response, as_user=True)
-								else:										
+								else:
+
 									mirror = not 'nomirror' in command
+									prefermu = 'prefermu' in command
+									alpha = 'alpha' in command
+
 									try:
 										hits = int ( re.search('hits=(\d+)', command ).group(1) )
 									except:
@@ -1279,7 +1285,7 @@ if __name__ == '__main__':
 									else:
 										db = 'fc'
 
-									p = subprocess.Popen("python3 ffnblast.py %s %s %i %i %s %i" % ( skids[0], channel, int(mirror), hits, db, cores ) , shell=True)
+									p = subprocess.Popen("python3 ffnblast.py %s %s %i %i %s %i %i %i" % ( skids[0], channel, int(mirror), hits, db, cores, int(prefermu), int(alpha) ) , shell=True)
 									open_processes.append(p)
 							else:
 								slack_client.api_call("chat.postMessage", channel=channel, text='I need a *single* neuron to nblast! E.g. `@catbot nblast #123456` ', as_user=True)

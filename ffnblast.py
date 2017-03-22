@@ -37,15 +37,16 @@ if __name__ == '__main__':
 	hits = int(sys.argv[4])
 	db = sys.argv[5]
 	cores = int(sys.argv[6])
+	prefer_muscore = bool( int( sys.argv[7]) )	
+	use_alpha = bool( int( sys.argv[8]) )	
 	reverse = False
 
 	#Initialize slack client from botconfig.py
 	slack_client = SlackClient( botconfig.SLACK_KEY )
 	#print('Connection to Slack:', slack_client.rtm_connect() )
 
-	print( 'Blasting neuron %s ( mirror=%s; reverse=%s; hits=%i; db=%s ) - please wait...' % ( skid, mirror, reverse, hits, db ) )
-
-	ts = slack_client.api_call("chat.postMessage", channel=channel, text='Blasting neuron %s ( mirror=%s; reverse=%s; hits=%i, db=%s ) - please wait...' % ( skid, mirror, reverse, hits, db ) , as_user=True)['ts']
+	print( 'Blasting neuron #%s ( mirror=%s; reverse=%s; hits=%i; db=%s; use_alpha=%s; prefer_reverse_score=%s ) - please wait...' % ( skid, mirror, reverse, hits, db, use_alpha, prefer_muscore ) )
+	ts = slack_client.api_call("chat.postMessage", channel=channel, text='Blasting neuron #%s `( mirror=%s; reverse=%s; hits=%i; db=%s; use_alpha=%s; prefer_reverse_score=%s )` - please wait...' % ( skid, mirror, reverse, hits, db, use_alpha, prefer_muscore ) , as_user=True)['ts']
 
 	#Import R libraries
 	elmr = importr('elmr')
@@ -59,13 +60,7 @@ if __name__ == '__main__':
 	login = robjects.r('options(catmaid.server="%s", catmaid.authname="%s",catmaid.authpassword="%s", catmaid.token="%s")' % ( botconfig.SERVER_URL, botconfig.HTTP_USER, botconfig.HTTP_PW, botconfig.AUTHTOKEN ) )
 	fcdps = robjects.r('fcdps<-read.neuronlistfh("%s",	localdir=getOption("flycircuit.datadir"))' % botconfig.FLYCIRCUIT_DB ) 
 	gmrdps = robjects.r('gmrdps<-read.neuronlistfh("%s",	localdir=getOption("flycircuit.datadir"))' % botconfig.JANELIA_GMR_DB )  
-	#robjects.r('remotesync(dps,download.missing = TRUE)')
-	"""
-	if db = 'fc':
-		robjects.r("options('nat.default.neuronlist'='fc')")
-	elif db = 'gmr':
-		robjects.r("options('nat.default.neuronlist'='gmrdps')")
-	"""
+	#robjects.r('remotesync(dps,download.missing = TRUE)')	
 
 	#Make R functions callable in Python
 	nblast_fafb = robjects.r( 'nblast_fafb' )
@@ -76,17 +71,13 @@ if __name__ == '__main__':
 	vfb_tovfbids = robjects.r('vfb_tovfbids')
 	gmr_vfbid = robjects.r('gmr_vfbid')
 
-	print('Blasting - please wait...')	
-
-	#print( 'flycircuit db path:' ,str( robjects.r('getOption("flycircuit.datadir")') ) )
-	#print( 'flycircuit scoremat:' ,str( robjects.r('getOption("flycircuit.scoremat")') ) )
-	#print( 'Nat neuronlist:' ,str( robjects.r('getOption("nat.default.neuronlist")') ) )
+	print('Blasting - please wait...')
 
 	if db == 'fc':
-		res = nblast_fafb( int(skid), mirror = mirror, reverse = reverse, db = fcdps )	
+		res = nblast_fafb( int(skid), mirror = mirror, reverse = reverse, db = fcdps, UseAlpha = use_alpha )	
 		su = summary( res, db = fcdps )	
 	elif db == 'gmr':
-		res = nblast_fafb( int(skid), mirror = mirror, reverse = reverse, db = gmrdps )	
+		res = nblast_fafb( int(skid), mirror = mirror, reverse = reverse, db = gmrdps, UseAlpha = use_alpha )	
 		su = summary( res, db = gmrdps )
 
 	#Read results into python data objects
@@ -109,10 +100,20 @@ if __name__ == '__main__':
 	#Generate a 3d html from the results
 	plot3d = robjects.r( 'plot3d')
 	writeWebGL = robjects.r( 'writeWebGL' )
+
+	#Summary comes ordered by reverse score (muscore). However, the hits are based solely on forward score
+	#If we prefer muscore, use hit numbers ('n') of the first few entries and then assign new the hit numbers
+	if not prefer_muscore:
+		h = robjects.IntVector( range( hits + 1 ) )
+	else:
+		h = robjects.IntVector( [ e['n'] for e in s[:hits] ] )
+		for i, n in enumerate(s):
+			s[i]['n'] = i+1
+
 	if db == 'fc':
-		plot3d( res , hits = robjects.IntVector( range( hits + 1 ) ), db = fcdps , soma = True)
+		plot3d( res , hits = h, db = fcdps , soma = True)
 	elif db == 'gmr':
-		plot3d( res , hits = robjects.IntVector( range( hits + 1 ) ), db = gmrdps, soma = True )
+		plot3d( res , hits = h, db = gmrdps, soma = True )
 
 	writeWebGL( 'webGL', width = 1000 )
 	robjects.r('rgl.close()')
