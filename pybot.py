@@ -25,6 +25,7 @@ from tabulate import tabulate
 from rpy2.robjects.packages import importr
 from pyzotero import zotero
 from datetime import datetime, date
+from websocket import WebSocketConnectionClosedException
 from pymaid import 	CatmaidInstance, \
 					get_review, \
 					get_3D_skeleton, \
@@ -34,7 +35,6 @@ from pymaid import 	CatmaidInstance, \
 					retrieve_skids_by_name, \
 					retrieve_skids_by_annotation, \
 					get_annotations_from_list
-
 
 class subscription_manager(threading.Thread):
 	""" Class to procoess subscriptions to neurons	
@@ -1192,6 +1192,9 @@ if __name__ == '__main__':
 
 	#Inintialize slack client
 	slack_client = SlackClient( botconfig.SLACK_KEY )
+
+	#Initialize flask app to listen for POST responses from Slack	
+	app.run(debug=True)
 
 	if botconfig.ZOT_KEY:
 		# Zotero( group_id, library_type, API_key )

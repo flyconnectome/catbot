@@ -133,8 +133,11 @@ if __name__ == '__main__':
 			#e['name'] is gene name -> use fc_neuron to get neuron name
 			neuron_name = fc_neuron(e['name'])[0]
 			vfb_id = vfb_tovfbids(neuron_name)[0]					
-			fc_urls[neuron_name] = 'http://flycircuit.tw/flycircuitSourceData/NeuronData/%s/%s_lsm.png' % (neuron_name,neuron_name)
-			vfb_urls[vfb_id] = 'http://www.virtualflybrain.org/site/stacks/index.htm?id=%s' % vfb_id 
+			if type(vfb_id) == type( str() ):
+				vfb_urls[vfb_id] = 'http://www.virtualflybrain.org/site/stacks/index.htm?id=%s' % vfb_id 
+			else:
+				vfb_id = 'N/A'
+			fc_urls[neuron_name] = 'http://flycircuit.tw/flycircuitSourceData/NeuronData/%s/%s_lsm.png' % (neuron_name,neuron_name)			
 			table.append ( [ e['name'], round(e['score'],3) , round(e['muscore'],3) , e['Driver'], e['Gender'], vfb_id, e['n']  ] )
 	else:
 		table = [ ['*Name*','*Score*','*MuScore*','*VFB*','*Hit No.*'] ]	
