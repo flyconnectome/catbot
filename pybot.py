@@ -1191,10 +1191,7 @@ if __name__ == '__main__':
 	remote_instance = CatmaidInstance( botconfig.SERVER_URL, botconfig.HTTP_USER, botconfig.HTTP_PW, botconfig.AUTHTOKEN )
 
 	#Inintialize slack client
-	slack_client = SlackClient( botconfig.SLACK_KEY )
-
-	#Initialize flask app to listen for POST responses from Slack	
-	app.run(debug=True)
+	slack_client = SlackClient( botconfig.SLACK_KEY )	
 
 	if botconfig.ZOT_KEY:
 		# Zotero( group_id, library_type, API_key )

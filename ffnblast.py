@@ -70,6 +70,7 @@ if __name__ == '__main__':
 	fc_neuron = robjects.r('fc_neuron')
 	vfb_tovfbids = robjects.r('vfb_tovfbids')
 	gmr_vfbid = robjects.r('gmr_vfbid')
+	rainbow = robjects.r('rainbow')
 
 	print('Blasting - please wait...')
 
@@ -104,11 +105,16 @@ if __name__ == '__main__':
 	#Summary comes ordered by reverse score (muscore). However, the hits are based solely on forward score
 	#If we prefer muscore, use hit numbers ('n') of the first few entries and then assign new the hit numbers
 	if not prefer_muscore:
-		h = robjects.IntVector( range( hits + 1 ) )
+		h = robjects.IntVector( range( hits + 1 ) )		
+		hit_names = []
+		for i in range(hits):
+			hit_names.append( [ e['name'] for e in s if e['n'] == i+1 ][0] )		
 	else:
 		h = robjects.IntVector( [ e['n'] for e in s[:hits] ] )
+		hit_names = [ e['name'] for e in s[:hits] ]
+		#Reassign the 'n' (hit) value
 		for i, n in enumerate(s):
-			s[i]['n'] = i+1
+			s[i]['n'] = i+1	
 
 	if db == 'fc':
 		plot3d( res , hits = h, db = fcdps , soma = True)
@@ -152,13 +158,17 @@ if __name__ == '__main__':
 
 	tab = tabulate(table)
 	for vfb_id in vfb_urls:
-		tab = tab.replace( vfb_id , '<%s|%s>' % ( vfb_urls[vfb_id], vfb_id ) )	
+		tab = tab.replace( vfb_id , '<%s|%s>' % ( vfb_urls[vfb_id], vfb_id ) )
 
-	slack_client.api_call("chat.postMessage", channel=channel, text= '```'+tab+'```', as_user=True)
+	slack_client.api_call("chat.postMessage", channel=channel, text= '```'+tab+'```', as_user=True)	
 
-	with open('webGL/index.html', 'r') as f:
+	with open('webGL/index.html', 'r') as f:		
 		slack_client.api_call("files.upload", 	channels=channel, 
 												file = f,
 												title = '3D nblast results for neuron #%s' % skid,
 												initial_comment = 'Open file in browser'
-												)
+												)		
+	#Color palette is based on R's rainbow() -> we have to strip the last two values (those are alpha)
+	colors = [ e[:-2] for e in list( rainbow( hits ) ) ]
+	legend = '\n'.join( list( map ( lambda c,n : c + ' - ' + n, colors, hit_names ) ) )
+	slack_client.api_call("chat.postMessage", channel=channel, text= legend, as_user=True)	
