@@ -19,6 +19,7 @@
 import time, re, threading, random, json, sys, subprocess, shelve
 import matplotlib.pyplot as plt
 import rpy2.robjects as robjects
+import logging
 from slackclient import SlackClient
 from plotneuron import plotneuron
 from tabulate import tabulate
@@ -50,16 +51,16 @@ class subscription_manager(threading.Thread):
 			self.user = user
 			self.id = random.randint(1,99999)			
 			threading.Thread.__init__(self)		
-		except:
-			print('!Error initiating thread for',self.command)  
+		except Exception as e:
+			logger.error('Failed to initiate thread for ' + self.command, exc_info = True)  
 
 	def join(self):
 		try:
 			threading.Thread.join(self)
-			print('Thread %i closed' % self.id )
+			logger.debug('Thread %i closed' % self.id )
 			return None
-		except:
-			print('!ERROR joining thread for',self.url)
+		except Exception as e:
+			logger.error('Failed to join thread for ' + self.url, exc_info = True  )
 		return None
 
 	def process_neurons( self, skids ):
@@ -84,7 +85,7 @@ class subscription_manager(threading.Thread):
 		r_status = get_review(skids, remote_instance = remote_instance, project_id = botconfig.PROJECT_ID)	
 
 		new_data = {}		
-		print('Extracting data...')
+		logger.info('Extracting data...')
 		#Extract data
 		for i,s in enumerate(skids):								
 			list_of_childs = { n[0] : [] for n in skdata[i][0] } 
@@ -180,7 +181,7 @@ class subscription_manager(threading.Thread):
 		"""		
 		basic_values = ['name','branch_points','n_nodes','pre_synapses','post_synapses','open_ends', 'review_status']		
 
-		print('Started new thread %i for command <%s> by user <%s>' % (self.id, self.command, self.user ) )
+		logger.info('Started new thread %i for command <%s> by user <%s>' % (self.id, self.command, self.user ) )
 
 		try:
 			data = shelve.open('subscriptiondb')			
@@ -189,7 +190,7 @@ class subscription_manager(threading.Thread):
 				self.slack_client.api_call("chat.postMessage", channel='@' + self.user,
 			                          text='Unable to open subscription database!', as_user=True)
 			else:
-				print('Unable to open subscription database.')
+				logger.error('Unable to open subscription database.')
 			return
 
 		skids = parse_neurons( self.raw_command )
@@ -264,10 +265,10 @@ class subscription_manager(threading.Thread):
 		#MAKE SYNAPTIC PARTNERS CLICKY? like this: <http://www.zapier.com|Text to make into a link>
 
 		if 'update' in self.command or self.global_update is True:
-			print('Pushing updates')
+			logger.debug('Pushing updates')
 			if self.global_update is True:				
 				users_to_notify = [ u for u in data['users'] if data['users'][u]['daily_updates'] is True ]
-				print('Global update!', users_to_notify)
+				logger.debug('Global update! ' + users_to_notify)
 				neurons_to_process = []
 				for u in data['users']:
 					neurons_to_process += [ n for n in data['users'][u]['neurons'] ]				
@@ -382,7 +383,7 @@ class subscription_manager(threading.Thread):
 					#Reset response
 					response = ''
 				else:
-					print('user',u)
+					logger.debug( 'No changes for user ' + u )
 					self.slack_client.api_call("chat.postMessage", channel= '@' + u,
 			                          text='None of the neurons you are subscribed to have changed recently!', as_user=True)
 
@@ -392,17 +393,19 @@ class subscription_manager(threading.Thread):
 			data['users'] = users
 		try:			
 			data.close()
+			logger.debug('Database update successful')
 			if self.user != None:
 				self.slack_client.api_call("chat.postMessage", channel='@' + self.user,
 				                          text=response, as_user=True)
 			else:
-				print(response)
+				logger.debug('User is None: ' + response)
 		except:
+			logger.error('Failed to update database')
 			if self.user != None:
 				self.slack_client.api_call("chat.postMessage", channel='@' + self.user,
 				                          text='Oops! Something went wrong. If you made any changes to your subscriptions, please try again.', as_user=True)
 			else:
-				print(response)
+				logger.debug('User is None: ' + response)
 		return
 
 class return_review_status(threading.Thread):
@@ -416,22 +419,22 @@ class return_review_status(threading.Thread):
 			self.slack_client = slack_client
 			self.id = random.randint(1,99999)
 			threading.Thread.__init__(self)			           
-		except:
-			print('!Error initiating thread for',self.command)  
+		except Exception as e:
+			logger.error('Failed to initiate thread for ' + self.command, exc_info = True)  
 
 	def join(self):
 		try:
 			threading.Thread.join(self)
-			print('Thread %i closed' % self.id )
+			logger.debug('Thread %i closed' % self.id )
 			return None
-		except:
-			print('!ERROR joining thread for',self.url)
+		except Exception as e:
+			logger.error('Failed to join thread for ' + self.url, exc_info = True  )
 		return None
 
 	def run(self):
 		""" Extracts skids from command and returns these neurons review-status.
 		"""	
-		print('Started new thread %i for command <%s>' % (self.id, self.command ) )
+		logger.debug('Started new thread %i for command <%s>' % (self.id, self.command ) )
 		skids = parse_neurons( self.raw_command )
 
 		ts = self.slack_client.api_call("chat.postMessage", channel=self.channel,
@@ -476,22 +479,22 @@ class return_plot_neuron(threading.Thread):
 			self.slack_client = slack_client
 			self.id = random.randint(1,99999)
 			threading.Thread.__init__(self)			           
-		except:
-			print('!Error initiating thread for',self.command)  
+		except Exception as e:
+			logger.error('Failed to initiate thread for ' + self.command, exc_info = True)  
 
 	def join(self):
 		try:
 			threading.Thread.join(self)
-			print('Thread %i closed' % self.id )
+			logger.debug('Thread %i closed' % self.id )
 			return None
-		except:
-			print('!ERROR joining thread for',self.url)
+		except Exception as e:
+			logger.error('Failed to join thread for ' + self.url, exc_info = True  )
 		return None
 
 	def run(self):
 		""" Extracts skids from command and generates + uploads a file
 		"""
-		print('Started new thread %i for command <%s>' % (self.id, self.command ) )
+		logger.debug('Started new thread %i for command <%s>' % (self.id, self.command ) )
 		skids = parse_neurons( self.raw_command )
 
 		if not skids:
@@ -557,8 +560,16 @@ class return_plot_neuron(threading.Thread):
 							'brain':(.9,.9,.9)
 							}
 
-
-			fig, ax = plotneuron(skids, remote_instance, *args, **kwargs)
+			try:
+				fig, ax = plotneuron(skids, remote_instance, *args, **kwargs)
+			except Exception as e:
+				self.slack_client.api_call(	"chat.delete",
+										channel = self.channel,
+										ts = ts
+										)
+				logger.error('Error in plotneuron()', exc_info = True)
+				self.slack_client.api_call("chat.postMessage", channel=self.channel, text= 'Oops - something went wrong while trying to plot your neuron(s).', as_user=True )
+				return
 
 			if len(skids) > 1:
 				plt.legend()
@@ -594,16 +605,16 @@ class return_connectivity(threading.Thread):
 			self.slack_client = slack_client
 			self.id = random.randint(1,99999)
 			threading.Thread.__init__(self)			           
-		except:
-			print('!Error initiating thread for',self.command)  
+		except Exception as e:
+			logger.error('Failed to initiate thread for ' + self.command, exc_info = True) 
 
 	def join(self):
 		try:
 			threading.Thread.join(self)
-			print('Thread %i closed' % self.id )
+			logger.debug('Thread %i closed' % self.id )
 			return None
-		except:
-			print('!ERROR joining thread for',self.url)
+		except Exception as e:
+			logger.error('Failed to join thread for ' + self.url, exc_info = True  )
 		return None
 
 	def run(self):
@@ -611,7 +622,7 @@ class return_connectivity(threading.Thread):
 		"""		
 		skids = parse_neurons( self.raw_command )
 
-		print('Started new thread %i for command <%s>' % (self.id, self.command ) )
+		logger.debug('Started new thread %i for command <%s>' % (self.id, self.command ) )
 
 		for s in skids:
 			if skid_exists( s, remote_instance, project_id = botconfig.PROJECT_ID ) is False:
@@ -629,7 +640,7 @@ class return_connectivity(threading.Thread):
 
 		try:
 			filt = re.search('filter="(.*?)"',self.command).group(1).split(',')
-			print('Filtering partners for:', filt)
+			logger.debug('Filtering partners for: ' + str(filt) )
 		except:
 			filt = []
 
@@ -695,23 +706,23 @@ class return_url(threading.Thread):
 			self.slack_client = slack_client
 			self.id = random.randint(1,99999)
 			threading.Thread.__init__(self)			           
-		except:
-			print('!Error initiating thread for',self.command)  
+		except Exception as e:
+			logger.error('Failed to initiate thread for ' + self.command, exc_info = True)  
 
 	def join(self):
 		try:
 			threading.Thread.join(self)
-			print('Thread %i closed' % self.id )
+			logger.debug('Thread %i closed' % self.id )
 			return None
-		except:
-			print('!ERROR joining thread for',self.url)
+		except Exception as e:
+			logger.error('Failed to join thread for ' + self.url, exc_info = True  )
 		return None
 
 	def run(self):
 		""" Returns urls for a list of neurons
 		"""		
 		skids = parse_neurons( self.raw_command )
-		print('Started new thread %i for command <%s>' % (self.id, self.command ) )
+		logger.debug('Started new thread %i for command <%s>' % (self.id, self.command ) )
 
 		for s in skids:
 			if skid_exists( s, remote_instance ) is False:
@@ -747,22 +758,22 @@ class return_zotero(threading.Thread):
 			self.slack_client = slack_client
 			self.id = random.randint(1,99999)
 			threading.Thread.__init__(self)			           
-		except:
-			print('!Error initiating thread for',self.command)  
+		except Exception as e:
+			logger.error('Failed to initiate thread for ' + self.command, exc_info = True)   
 
 	def join(self):
 		try:
 			threading.Thread.join(self)
-			print('Thread %i closed' % self.id )
+			logger.debug('Thread %i closed' % self.id )
 			return None
-		except:
-			print('!ERROR joining thread for',self.url)
-		return None		
+		except Exception as e:
+			logger.error('Failed to join thread for ' + self.url, exc_info = True  )
+		return None
 
 	def run(self):
 		""" Lists all available commands and their syntax.
 		"""
-		print('Started new thread %i for command <%s>' % (self.id, self.command ) )		
+		logger.debug('Started new thread %i for command <%s>' % (self.id, self.command ) )		
 
 		#First extract tags to search for
 		command = self.command.replace('zotero', '')
@@ -777,8 +788,8 @@ class return_zotero(threading.Thread):
 		#Retrieve all items in library
 		items = zot.everything ( zot.items() )
 		pdf_files = [ i for i in items if i['data']['itemType'] == 'attachment' and i['data']['title'] == 'Full Text PDF' ]
-		print('Searching %i Zotero items for:' % len(items))
-		print(tags)
+		logger.debug('Searching %i Zotero items for:' % len(items))
+		logger.debug(tags)
 
 		self.slack_client.api_call(	"chat.delete",
 										channel = self.channel,
@@ -822,24 +833,23 @@ class return_zotero(threading.Thread):
 				try:
 					if t in e['data']['date']:
 						this_tag = True
-						#print('Found tag %s in %s' % ( t, e['data']['date'] ) )
+						logger.debug('Found tag %s in %s' % ( t, e['data']['date'] ) )
 					elif t.lower() in [ a['lastName'].lower() for a in e['data']['creators']]:
 						this_tag = True	
-						#print('Found tag %s in %s' % ( t, str([ a['lastName'].lower() for a in e['data']['creators']]) ) )
+						logger.debug('Found tag %s in %s' % ( t, str([ a['lastName'].lower() for a in e['data']['creators']]) ) )
 					elif t.lower() in e['data']['title'].lower():
 						this_tag = True
-						#print('Found tag %s in %s' % ( t, e['data']['title'].lower() ) )
+						logger.debug('Found tag %s in %s' % ( t, e['data']['title'].lower() ) )
 					elif True in [ t.lower() in a['tag'].lower() for a in e['data']['tags'] ]:
 						this_tag = True
-						#print('Found tag %s in %s (%s)' % ( t, [ a['tag'].lower() for a in e['data']['tags'] ], [ t.lower() in a['tag'].lower() for a in e['data']['tags'] ] ) )
+						logger.debug('Found tag %s in %s (%s)' % ( t, [ a['tag'].lower() for a in e['data']['tags'] ], [ t.lower() in a['tag'].lower() for a in e['data']['tags'] ] ) )
 				except:
-					pass
+					pass			
 				
-				#print('After:',this_tag)
 				include.append( this_tag )
 
 			if False not in include:
-				#print(tags, include, e['data']['date'] )
+				logger.debug( str(tags) + str(include) + e['data']['date'] )
 				results.append( e )
 
 		if results:
@@ -885,22 +895,22 @@ class return_help(threading.Thread):
 			self.slack_client = slack_client
 			self.id = random.randint(1,99999)
 			threading.Thread.__init__(self)			           
-		except:
-			print('!Error initiating thread for',self.command)  
+		except Exception as e:
+			logger.error('Failed to initiate thread for ' + self.command, exc_info = True)  
 
 	def join(self):
 		try:
 			threading.Thread.join(self)
-			print('Thread %i closed' % self.id )
+			logger.debug('Thread %i closed' % self.id )
 			return None
-		except:
-			print('!ERROR joining thread for',self.url)
-		return None		
+		except Exception as e:
+			logger.error('Failed to join thread for ' + self.url, exc_info = True  )
+		return None
 
 	def run(self):
 		""" Lists all available commands and their syntax.
 		"""
-		print('Started new thread %i for command <%s>' % (self.id, self.command ) )		
+		logger.debug('Started new thread %i for command <%s>' % (self.id, self.command ) )		
 		if 'partners' in self.command:
 			response = '`partners` returns the synaptic partners for a list of <neurons>. You can pass me keywords to filter the list: \n'
 			response += '1. Add `incoming` or `outgoing` to limit results to up- or downstream partners \n'
@@ -972,17 +982,17 @@ class neurondb_manager(threading.Thread):
 			self.slack_client = slack_client
 			self.id = random.randint(1,99999)
 			threading.Thread.__init__(self)			           
-		except:
-			print('!Error initiating thread for',self.command)  
+		except Exception as e:
+			logger.error('Failed to initiate thread for ' + self.command, exc_info = True)  
 
 	def join(self):
 		try:
 			threading.Thread.join(self)
-			print('Thread %i closed' % self.id )
+			logger.debug('Thread %i closed' % self.id )
 			return None
-		except:
-			print('!ERROR joining thread for',self.url)
-		return None		
+		except Exception as e:
+			logger.error('Failed to join thread for ' + self.url, exc_info = True  )
+		return None
 
 	def delete_value(self, neuron ):
 		""" Generates a new entry for a given skid
@@ -1154,7 +1164,7 @@ def parse_slack_output(slack_rtm_output, user_list):
         for output in output_list:
             if output and 'text' in output and botconfig.AT_BOT in output['text']:
                 # return text after the @ mention, whitespace removed                
-                print('Message from', [ e['name'] for e in user_list['members'] if e['id'] == output['user'] ] , output['user'] , ':', output['text'] )
+                logger.debug( 'Message from %s (%s): %s ' % ( [ e['name'] for e in user_list['members'] if e['id'] == output['user'] ][0], output['user'], output['text'] ) )
                 return output['text'].split(botconfig.AT_BOT)[1].strip(), \
                        output['channel'], \
                        [ e['name'] for e in user_list['members'] if e['id'] == output['user'] ][0]                       
@@ -1180,15 +1190,40 @@ def parse_neurons( command ):
 
 
 if __name__ == '__main__':
+	import sys
+
+	#Create logger
+	logger = logging.getLogger('pybotLog')	
+	#Create file handler which logs even debug messages
+	fh = logging.FileHandler('pymaid.log')
+	fh.setLevel(logging.DEBUG)
+	#Create console handler - define different log level is desired
+	ch = logging.StreamHandler()
+	ch.setLevel(logging.DEBUG)
+	#Create formatter and add it to the handlers
+	formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+	fh.setFormatter(formatter)
+	ch.setFormatter(formatter)
+	#Add the handlers to the logger
+	logger.addHandler(fh)
+	logger.addHandler(ch)	
+
+	if 'debug' in sys.argv:
+		logger.setLevel(logging.DEBUG)
+		logger.info('Starting Pybot in Debug Mode...')
+	else:
+		logger.setLevel(logging.INFO)
+		logger.info('Starting Pybot...')
+
 	#botconfig.py holds credentials for CATMAID, Slack and Zotero
 	try:
 		import botconfig
 	except:
-		print('Import of botconfig.py failed. Please make sure you have this configuration file correctly set up!')
+		logger.error('Import of botconfig.py failed. Please make sure you have this configuration file correctly set up!')
 		sys.exit()
 
 	#Initialize CATMAID instance
-	remote_instance = CatmaidInstance( botconfig.SERVER_URL, botconfig.HTTP_USER, botconfig.HTTP_PW, botconfig.AUTHTOKEN )
+	remote_instance = CatmaidInstance( botconfig.SERVER_URL, botconfig.HTTP_USER, botconfig.HTTP_PW, botconfig.AUTHTOKEN, logger = 'pybot' )
 
 	#Inintialize slack client
 	slack_client = SlackClient( botconfig.SLACK_KEY )	
@@ -1206,21 +1241,24 @@ if __name__ == '__main__':
 	last_global_update = date.today()
 
 	user_list = slack_client.api_call('users.list')
-	#print('Users:', user_list)
+	logger.debug('Users: ' + str( [ u['name'] for u in user_list['members'] ] ) )
 
 	if slack_client.rtm_connect():
-		print("Pybot connected and running!")
+		logger.info("Pybot connected and running!")
 		while True:
 			try:
 				command, channel, user = parse_slack_output( slack_client.rtm_read(), user_list )
-			except WebSocketConnectionClosedException as e:
-				print(e)
-				print (str( datetime.now() ),'Caught websocket disconnect, reconnecting...')
+			except WebSocketConnectionClosedException as e:				
+				logger.error('Caught websocket disconnect, reconnecting...', exc_info = True)
 				time.sleep(botconfig.READ_WEBSOCKET_DELAY)
-				slack_client.rtm_connect()
+
+				if slack_client.rtm_connect():
+					logger.error('Reconnect successful!')
+				else:
+					logger.error('Reconnect failed!')
+
 			except Exception as e:
-				print(e)
-				print(str( datetime.now() ),'Error parsing slack output')
+				logger.error('Error parsing slack output: ' + e, exc_info=True )
 
 			#On midnight, trigger global update
 			if date.today() != last_global_update:
@@ -1233,23 +1271,37 @@ if __name__ == '__main__':
 				#Replace odd ” with "
 				command = command.replace( '”' , '"' )
 
-				print( str( datetime.now() ), ': got a commmand in channel', channel, ':' , command ) 
-				if len(open_threads)+len(open_processes) <= botconfig.MAX_PARALLEL_REQUESTS:	
+				logger.info('Got a commmand by %s in channel %s: %s' % (user, channel, command ) )
+
+				#Only process if not at max open threads
+				if len(open_threads)+len(open_processes) <= botconfig.MAX_PARALLEL_REQUESTS:
 						t = None
 						if 'help' in command.lower():
 							t = return_help(slack_client, command, channel)
 						elif 'review-status' in command.lower():							
 							t = return_review_status(slack_client, command, channel)						
 						elif 'plot' in command.lower():
-							t = return_plot_neuron(slack_client, command, channel)
-						elif 'url' in command.lower():
+							try:
+								t = return_plot_neuron(slack_client, command, channel)
+							except Exception as e:
+								logger.error("Error while plotting: " + e, exc_info=True )
+								slack_client.api_call("chat.postMessage", channel=channel, text='Ooops, something went wrong... please try again or contact an admin.', as_user=True)
+						elif 'url' in command.lower():							
 							t = return_url(slack_client, command, channel)
 						elif 'partners' in command.lower():
 							t = return_connectivity(slack_client, command, channel)
 						elif 'neurondb' in command.lower():
-							t = neurondb_manager(slack_client, command, channel, user)
+							try:
+								t = neurondb_manager(slack_client, command, channel, user)
+							except Exception as e:
+								logger.error("Error while database operation: " + e, exc_info=True )
+								slack_client.api_call("chat.postMessage", channel=channel, text='Ooops, something went wrong... please try again or contact an admin.', as_user=True)
 						elif 'subscription' in command.lower():
-							t = subscription_manager(slack_client, command, channel, user)
+							try:								
+								t = subscription_manager(slack_client, command, channel, user)
+							except Exception as e:
+								logger.error("Error while processing subscription: " + e, exc_info=True )
+								slack_client.api_call("chat.postMessage", channel=channel, text='Ooops, something went wrong... please try again or contact an admin.', as_user=True)
 						#elif 'global' in command.lower():
 						#	t = subscription_manager(slack_client, '', None, None, global_update = True )
 						elif 'nblast' in command.lower():
@@ -1259,7 +1311,7 @@ if __name__ == '__main__':
 
 							skids = parse_neurons( command )							
 
-							if len(skids) == 1:								
+							if len(skids) == 1:							
 								if skid_exists( skids[0], remote_instance ) is False:
 										response = "I'm sorry - the neuron #%s does not seem to exists. Please try again." % skids[0]
 										slack_client.api_call("chat.postMessage", channel=channel,
@@ -1291,7 +1343,10 @@ if __name__ == '__main__':
 								slack_client.api_call("chat.postMessage", channel=channel, text='I need a *single* neuron to nblast! E.g. `@catbot nblast #123456` ', as_user=True)
 						elif 'zotero' in command.lower():
 							if zot:
-								t = return_zotero(slack_client, command, channel)
+								try:
+									t = return_zotero(slack_client, command, channel)
+								except Exception as e:
+									logger.error("Error while processing Zotero: " + e, exc_info=True )
 							else:
 								response = "Sorry, I can't process your Zotero request unless you have it properly configured :("
 								slack_client.api_call("chat.postMessage", channel=channel, text=response, as_user=True)
@@ -1304,10 +1359,11 @@ if __name__ == '__main__':
 							open_threads.append( t )
 
 				else:
+					logger.info('Too many open threads - ignoring command for now.')
 					slack_client.api_call("chat.postMessage", channel=channel, text= 'I am currently really busy. Please give me a moment and try again. Cheers!', as_user=True )
 
 			if len(open_threads)+len(open_processes) != previous_open_threads:				
-				print('Open threads/processes:', len(open_threads)+len(open_processes))
+				logger.debug('Open threads/processes: %i' % (len(open_threads) + len(open_processes) ) )
 				previous_open_threads = len(open_threads)+len(open_processes)
 
 			#Try closing open threads
@@ -1325,7 +1381,7 @@ if __name__ == '__main__':
 
 			time.sleep(botconfig.READ_WEBSOCKET_DELAY)
 	else:
-		print("Connection failed. Invalid Slack token or bot ID?")
+		logger.error("Connection failed. Invalid Slack token or bot ID?")
 
 
 

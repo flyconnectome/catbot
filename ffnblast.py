@@ -22,7 +22,7 @@
 
 import rpy2.robjects as robjects
 from rpy2.robjects.packages import importr
-import json
+import json, logging
 from tabulate import tabulate
 from slackclient import SlackClient
 
@@ -40,12 +40,24 @@ if __name__ == '__main__':
 	prefer_muscore = bool( int( sys.argv[7]) )	
 	use_alpha = bool( int( sys.argv[8]) )	
 	reverse = False
+	
+	#Create logger
+	logger = logging.getLogger('fire-n-forget NBLAST')		
+	logger.setLevel(logging.INFO)
+	#Create console handler - define different log level is desired
+	ch = logging.StreamHandler()
+	ch.setLevel(logging.INFO)
+	#Create formatter and add it to the handlers
+	formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')	
+	ch.setFormatter(formatter)
+	#Add the handlers to the logger	
+	logger.addHandler(ch)	
 
 	#Initialize slack client from botconfig.py
 	slack_client = SlackClient( botconfig.SLACK_KEY )
-	#print('Connection to Slack:', slack_client.rtm_connect() )
+	logger.debug('Connection to Slack:', slack_client.rtm_connect() )
 
-	print( 'Blasting neuron #%s ( mirror=%s; reverse=%s; hits=%i; db=%s; use_alpha=%s; prefer_reverse_score=%s ) - please wait...' % ( skid, mirror, reverse, hits, db, use_alpha, prefer_muscore ) )
+	logger.info( 'Blasting neuron #%s ( mirror=%s; reverse=%s; hits=%i; db=%s; use_alpha=%s; prefer_reverse_score=%s ) - please wait...' % ( skid, mirror, reverse, hits, db, use_alpha, prefer_muscore ) )
 	ts = slack_client.api_call("chat.postMessage", channel=channel, text='Blasting neuron #%s `( mirror=%s; reverse=%s; hits=%i; db=%s; use_alpha=%s; prefer_reverse_score=%s )` - please wait...' % ( skid, mirror, reverse, hits, db, use_alpha, prefer_muscore ) , as_user=True)['ts']
 
 	#Import R libraries
@@ -72,7 +84,7 @@ if __name__ == '__main__':
 	gmr_vfbid = robjects.r('gmr_vfbid')
 	rainbow = robjects.r('rainbow')
 
-	print('Blasting - please wait...')
+	logger.debug('Blasting - please wait...')
 
 	if db == 'fc':
 		res = nblast_fafb( int(skid), mirror = mirror, reverse = reverse, db = fcdps, UseAlpha = use_alpha )	
@@ -124,7 +136,7 @@ if __name__ == '__main__':
 	writeWebGL( 'webGL', width = 1000 )
 	robjects.r('rgl.close()')
 
-	print('Finished nblasting neuron', skid )
+	logger.debug('Finished nblasting neuron', skid )
 
 	slack_client.api_call(	"chat.delete",
 										channel = channel,
