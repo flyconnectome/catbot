@@ -21,13 +21,13 @@ import matplotlib.pyplot as plt
 import rpy2.robjects as robjects
 import logging
 from slackclient import SlackClient
-from plotneuron import plotneuron
+from pymaid.plotneuron import plotneuron
 from tabulate import tabulate
 from rpy2.robjects.packages import importr
 from pyzotero import zotero
 from datetime import datetime, date
 from websocket import WebSocketConnectionClosedException
-from pymaid import 	CatmaidInstance, \
+from pymaid.pymaid import 	CatmaidInstance, \
 					get_review, \
 					get_3D_skeleton, \
 					retrieve_partners, \
