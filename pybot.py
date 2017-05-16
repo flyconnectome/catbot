@@ -279,7 +279,7 @@ class subscription_manager(threading.Thread):
 				neurons_to_process = data['users'][self.user]['subscriptions']
 			
 			#Gather new data here - this costs time!
-			new_data,skdata = self.process_neurons ( neurons_to_process ) 			
+			new_data, skdata = self.process_neurons ( list(set(neurons_to_process)) ) 			
 
 			for u in users_to_notify:
 				not_changed = []
@@ -288,6 +288,9 @@ class subscription_manager(threading.Thread):
 					neurons_to_update = data['users'][u]['subscriptions']
 				else:
 					neurons_to_update = skids
+
+				if not neurons_to_update:
+					continue
 
 				for n in neurons_to_update:					
 					#Changes are sorted into basic values and more complicated stuff (i.e. synaptic partners)
