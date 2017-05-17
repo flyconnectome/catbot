@@ -16,25 +16,36 @@
     along with this program. If not, see <http://www.gnu.org/licenses/>.
 """
 
-import time, re, threading, random, json, sys, subprocess, shelve
+import matplotlib
+#Switch a non-interactive, PNG-only backend. On Linux Tkinter, the default backend, causes trouble.
+matplotlib.use('AGG') 
+#Pyplot has to imported AFTER setting the backend!
 import matplotlib.pyplot as plt
+
+import time, re, threading, random, json, sys, subprocess, shelve, os
 import rpy2.robjects as robjects
 import logging
 from slackclient import SlackClient
-from pymaid.plotneuron import plotneuron
 from tabulate import tabulate
 from rpy2.robjects.packages import importr
 from pyzotero import zotero
 from datetime import datetime, date
 from websocket import WebSocketConnectionClosedException
+
+#For debugging only
+import sys
+sys.path.append('/Users/philipps/OneDrive/Cloudbox/Python/PyMaid')
+
+from pymaid.plot import plot2d
+from pymaid.morpho import classify_nodes
 from pymaid.pymaid import 	CatmaidInstance, \
 					get_review, \
 					get_3D_skeleton, \
-					retrieve_partners, \
-					retrieve_names, \
+					get_partners, \
+					get_names, \
 					skid_exists, \
-					retrieve_skids_by_name, \
-					retrieve_skids_by_annotation, \
+					get_skids_by_name, \
+					get_skids_by_annotation, \
 					get_annotations_from_list
 
 class subscription_manager(threading.Thread):
@@ -77,35 +88,29 @@ class subscription_manager(threading.Thread):
 		skdata :	skeleton data for all neurons (order as in <skids>)
 		"""		
 
-		#Retrieve relevant data from Catmaid server
-		neuron_names = retrieve_names( skids, remote_instance, project_id = botconfig.PROJECT_ID )
+		#Retrieve relevant data from Catmaid server		
 		skdata = get_3D_skeleton( skids, remote_instance, project_id = botconfig.PROJECT_ID )
-		connectivity = retrieve_partners( skids, remote_instance, project_id = botconfig.PROJECT_ID )	
+		connectivity = get_partners( skids, remote_instance, project_id = botconfig.PROJECT_ID, min_size = 500 )	
 		annotations = get_annotations_from_list (skids, remote_instance, project_id = botconfig.PROJECT_ID )		
-		r_status = get_review(skids, remote_instance = remote_instance, project_id = botconfig.PROJECT_ID)	
+		r_status = get_review(skids, remote_instance = remote_instance, project_id = botconfig.PROJECT_ID).set_index('skeleton_id')
+
+		skdata = classify_nodes( skdata )
 
 		new_data = {}		
 		logger.info('Extracting data...')
 		#Extract data
-		for i,s in enumerate(skids):								
-			list_of_childs = { n[0] : [] for n in skdata[i][0] } 
-			for n in skdata[i][0]:
-				try:
-					list_of_childs[ n[1] ].append( n[0] )
-				except:
-					list_of_childs[None]=[None]
-			
-			if 'ends' in skdata[i][2]:
-				closed_ends  =  len( skdata[i][2]['ends'] )
+		for neuron in skdata.itertuples():
+			if 'ends' in neuron.tags:
+				closed_ends  =  len( neuron.tags['ends'] )
 			else:
 				closed_ends = 0
 
-			if 'uncertain_ends' in skdata[i][2]:
-				uncertain_ends  =  len( skdata[i][2]['uncertain_end'] )
+			if 'uncertain_ends' in neuron.tags:
+				uncertain_ends  =  len( neuron.tags['uncertain_end'] )
 			else:
 				uncertain_ends = 0
 
-			open_ends = len( skdata[i][0] ) - closed_ends - uncertain_ends
+			open_ends = neuron.nodes[ neuron.nodes.type == 'end' ].shape[0] - closed_ends - uncertain_ends
 
 			try:
 				this_an = annotations[ str(s) ] 
@@ -113,7 +118,9 @@ class subscription_manager(threading.Thread):
 				this_an = []
 			
 			#First collect all synaptically connected neurons
-			all_con = {}
+			all_con = {  n :  { 'upstream' : '-', 'downstream' : '-' }  for n in connectivity[ connectivity[ neuron.skeleton_id ] > 0 ].skeleton_id.unique() }
+
+			"""
 			for n in [e for e in connectivity['incoming'] if connectivity['incoming'][e]['num_nodes'] >= 500]:
 				if str(s) in connectivity['incoming'][n]['skids']:					
 					all_con[n] = { 'incoming' : '-', 
@@ -124,6 +131,12 @@ class subscription_manager(threading.Thread):
 					all_con[n] = { 'incoming' : '-', 
 									'outgoing' : '-'
 									}
+			"""
+
+			for n in connectivity[ connectivity[ neuron.skeleton_id ] > 0 ][ [ 'skeleton_id', 'relation', neuron.skeleton_id ]  ].itertuples():
+				all_con[ n.skeleton_id] [  n.relation ] = n[ 2 ]
+
+			"""
 
 			#Now fill in connectivity
 			for n in all_con:
@@ -136,19 +149,21 @@ class subscription_manager(threading.Thread):
 				except:
 					pass					
 
+			"""
+
 			#Don't forget to update basic_values when editing database entries!				
-			new_data[s] = {		'name'					: neuron_names[str(s)],
-								'branch_points' 		: len( [ n for n in list_of_childs if len(list_of_childs[n]) > 1 ] ),
-								'n_nodes'				: len( skdata[i][0] ),
-								'pre_synapses' 			: len( [ c for c in skdata[i][1] if c[2] == 0 ] ),
-								'post_synapses'			: len( [ c for c in skdata[i][1] if c[2] == 1 ] ),
-								'open_ends'				: open_ends,
-								'synaptic_partners'		: all_con,
-								'last_update'			: str( date.today() ),
-								'last_edited_by'		: 'unknown',
-								'annotations'			: this_an,
-								'review_status'			: int( r_status[ str(s) ][1]/r_status[ str(s) ][0] * 100 )
-							}
+			new_data[ neuron.skeleton_id ] = {	'name'					: neuron.neuron_name,
+												'branch_points' 		: neuron.nodes[ neuron.nodes.type == 'branch' ].shape[0],
+												'n_nodes'				: neuron.nodes.shape[0],
+												'pre_synapses' 			: neuron.connectors[ neuron.connectors.relation == 0 ].shape[0],
+												'post_synapses'			: neuron.connectors[ neuron.connectors.relation == 1 ].shape[0],
+												'open_ends'				: open_ends,
+												'synaptic_partners'		: all_con,
+												'last_update'			: str( date.today() ), 
+												'last_edited_by'		: 'unknown',
+												'annotations'			: this_an,
+												'review_status'			: r_status.ix[ neuron.skeleton_id ].percent_reviewed
+											}
 
 		return new_data, skdata
 
@@ -211,7 +226,7 @@ class subscription_manager(threading.Thread):
 		#Now execture user command
 		if 'list' in self.command:
 			#List current subscriptions
-			neuron_names = retrieve_names( data['users'][self.user]['subscriptions'] ,remote_instance)
+			neuron_names = get_names( data['users'][self.user]['subscriptions'] ,remote_instance)
 			if neuron_names:
 				response = 'You are currently subscribed to the following neurons: \n'
 				response += '```' + tabulate( [ (neuron_names[str(s)], '#'+str(s) ) for s in data['users'][self.user]['subscriptions'] ] ) + '```'
@@ -219,13 +234,14 @@ class subscription_manager(threading.Thread):
 				response = 'Currently, I do not have any subscriptions for you!'
 		if 'new' in self.command:
 			#Add new subscriptions
-			if skids:	
+			if skids:
+				new_data, skdata = self.process_neurons( [ str(s) for s in skids if s not in data['users'][self.user]['neurons'] ]  )				
+
 				users = data['users']			
 				users[self.user]['subscriptions'] += skids 
 				users[self.user]['subscriptions'] = list ( set( users[self.user]['subscriptions'] ) )
 				data['users'] = users
 
-				new_data, skdata = self.process_neurons( [ s for s in skids if s not in data['users'][self.user]['neurons'] ]  )				
 				old_data = data['users']				
 				old_data[self.user]['neurons'].update( new_data )				
 				data['users'] = old_data
@@ -256,7 +272,7 @@ class subscription_manager(threading.Thread):
 						response += +'#' + str(s) + ' '
 					except:
 						pass
-				response = '```'					
+				response += '```'					
 			else:
 				response = 'Please provide me at least a single neuron to subscribe you to!'
 
@@ -271,28 +287,27 @@ class subscription_manager(threading.Thread):
 				logger.debug('Global update! ' + users_to_notify)
 				neurons_to_process = []
 				for u in data['users']:
-					neurons_to_process += [ n for n in data['users'][u]['neurons'] ]				
+					neurons_to_process += [ str(n) for n in data['users'][u]['neurons'] ]				
 			else:
 				ts = self.slack_client.api_call("chat.postMessage", channel='@' + self.user,
 									text='Got it! Collecting intel - please wait...', as_user=True)['ts']
 				users_to_notify = [ self.user ]
-				neurons_to_process = data['users'][self.user]['subscriptions']
+				neurons_to_process = [ str(s) for s in data['users'][self.user]['subscriptions'] ]
 			
 			#Gather new data here - this costs time!
-			new_data, skdata = self.process_neurons ( list(set(neurons_to_process)) ) 			
+			new_data,skdata = self.process_neurons ( neurons_to_process ) 			
 
 			for u in users_to_notify:
 				not_changed = []
 				response = ''
 				if not skids: 
-					neurons_to_update = data['users'][u]['subscriptions']
+					neurons_to_update = [ str(s) for s in data['users'][u]['subscriptions'] ]
 				else:
-					neurons_to_update = skids
+					neurons_to_update = [ str(s) for s in skids ]
 
-				if not neurons_to_update:
-					continue
+				for n in neurons_to_update:		
+					n = str(n)
 
-				for n in neurons_to_update:					
 					#Changes are sorted into basic values and more complicated stuff (i.e. synaptic partners)
 					changes = { 
 								'basic': {},
@@ -345,8 +360,13 @@ class subscription_manager(threading.Thread):
 
 					#If changes have been found, generate response 
 					if changes['basic'] or changes['synaptic_partners'] or changes['annotations']['new'] or changes['annotations']['gone']:						
-						root = [nd for nd in skdata[ neurons_to_process.index(n) ][0] if nd[1] == None][0]
-						url = remote_instance.url_to_coordinates( botconfig.PROJECT_ID , root[3:6] , stack_id = 5, tool = 'tracingtool' , active_skeleton_id = n, active_node_id = root[0] )						
+						nodes = skdata.set_index('skeleton_id').ix[ str(n) ].nodes
+						root_index = nodes [ nodes.type == 'root' ].index[0]
+						root = nodes.ix[ root_index  ]
+
+						#root = [nd for nd in skdata[ neurons_to_process.index(n) ][0] if nd[1] == None][0]
+
+						url = remote_instance.url_to_coordinates( botconfig.PROJECT_ID , (root.x,root.y,root.z) , stack_id = 5, tool = 'tracingtool' , active_skeleton_id = n, active_node_id = root[0] )						
 						link = '<' + url + '|' + new_data[n]['name'] + '>'
 						response += '%s - #%s (changes since %s) \n```' % ( link , str(n), data['users'][u]['neurons'][n]['last_update'] )
 					else:
@@ -363,7 +383,7 @@ class subscription_manager(threading.Thread):
 						response += 'Deleted annotations: %s \n' % '; '.join(changes['annotations']['gone'])
 					#Now connectivity
 					if changes['synaptic_partners']:
-						partner_names = retrieve_names( list( changes['synaptic_partners'].keys() ), remote_instance )
+						partner_names = get_names( list( changes['synaptic_partners'].keys() ), remote_instance )
 
 						#If partner does not exist anymore:
 						partner_names.update( { e:'not found' for e in list( changes['synaptic_partners'].keys() ) if e not in partner_names } )
@@ -452,11 +472,10 @@ class return_review_status(threading.Thread):
 
 		if not skids:
 			response = 'Please provide neurons as *#skid*, *annotation=" "* or *name=" "*! For example: _@catbot review-status #957684_'
-		else:			
-			names = retrieve_names(skids, remote_instance = remote_instance, project_id = botconfig.PROJECT_ID)
-			r_status = get_review(skids, remote_instance = remote_instance, project_id = botconfig.PROJECT_ID)			
+		else:						
+			r_status = get_review(skids, remote_instance = remote_instance, project_id = botconfig.PROJECT_ID)
 			response = 'This is the current review status: ```'			
-			table = [ ('Name','SKID','% Reviewed') ] + [ ( names[s], '#'+str(s), int( r_status[s][1]/r_status[s][0] * 100) ) for s in r_status ]
+			table = [ ('Name','SKID','% Reviewed') ] + [ ( s.neuron_name, '#'+ str( s.skeleton_id ), s.percent_reviewed ) for s in r_status.itertuples() ]
 			response += tabulate(table)
 			response += '```'
 
@@ -514,7 +533,9 @@ class return_plot_neuron(threading.Thread):
 									text='Got it! Generating plot - please wait...', as_user=True)['ts']
 
 			args = ['brain']
-			kwargs = {}
+			kwargs = {  'skids' : skids,
+						'remote_instance' : remote_instance
+					 }
 
 			if 'lh' in self.command:
 				args.append('lh')
@@ -553,7 +574,7 @@ class return_plot_neuron(threading.Thread):
 
 			#This is for cheating - will just give some faint color to all neuropils
 			if 'color_neuropils' in self.command:
-				kwargs = { 	
+				kwargs.update(  { 	
 							'lh':(.8,.8,.9),
 							'mb':(.8,.9,.9),
 							'al':(.9,.8,.9),
@@ -561,10 +582,10 @@ class return_plot_neuron(threading.Thread):
 							'sip':(.9,.9,.7),
 							'slp':(.9,.8,.8), 
 							'brain':(.9,.9,.9)
-							}
+							} )
 
-			try:
-				fig, ax = plotneuron(skids, remote_instance, *args, **kwargs)
+			try:				
+				fig, ax = plot2d( *args, **kwargs )
 			except Exception as e:
 				self.slack_client.api_call(	"chat.delete",
 										channel = self.channel,
@@ -574,15 +595,24 @@ class return_plot_neuron(threading.Thread):
 				self.slack_client.api_call("chat.postMessage", channel=self.channel, text= 'Oops - something went wrong while trying to plot your neuron(s).', as_user=True )
 				return
 
+			#Add legend if more than one neuron
 			if len(skids) > 1:
 				plt.legend()
+
+			#Check if output directory exists
+			if not os.path.isdir( 'renderings' ):
+				os.makedirs( 'renderings' )
+
+			#Save the figure
 			plt.savefig( 'renderings/neuron_plot.png', transparent = False, dpi=300 )
 
+			#Delete stand-by message
 			self.slack_client.api_call(	"chat.delete",
 										channel = self.channel,
 										ts = ts
 										)
 
+			#Upload neuron plot
 			with open('renderings/neuron_plot.png', 'rb') as f:
 				self.slack_client.api_call("files.upload", 	channels=self.channel, 
 														file = f,
@@ -657,43 +687,32 @@ class return_connectivity(threading.Thread):
 		if not skids:
 			response = 'Please provide neurons as `#skid`, `annotation=" "` or `name=" "`! For example: `@catbot partners #957684`'
 		else:				
-			cn = retrieve_partners( skids, remote_instance , threshold = thresh, project_id = botconfig.PROJECT_ID)
-			neuron_names = retrieve_names( list( set( [ n for n in cn['incoming'] ] + [ n for n in cn['outgoing'] ] + skids ) ) , remote_instance, project_id = botconfig.PROJECT_ID )
+			cn = get_partners( skids, remote_instance , threshold = thresh, project_id = botconfig.PROJECT_ID, filt = filt, directions = directions )
+			neuron_names = get_names( skids , remote_instance, project_id = botconfig.PROJECT_ID )
 
-			trunc_names = {}
-			for n in neuron_names:
-				if len( neuron_names[n] ) > 25:
-					trunc_names[n] = neuron_names[n][:25] + '..'
-				else:
-					trunc_names[n] = neuron_names[n]
+			#Truncate names
+			cn.neuron_name = [ n[:25] for n in cn.neuron_name ]		
+
+			#Sort by connectivity strength
+			cn.sort_values( [ str(s) for s in skids ], inplace = True , ascending = False )	
 
 			response = 'Here are partners of the neuron(s):\n'
 
 			for i,n in enumerate(skids):
-				response += '%i: %s - #%s\n' % ( i, neuron_names[n], n )
+				response += '%i: %s - #%s\n' % ( i, neuron_names[ str(n) ], n )
 
 			self.slack_client.api_call("chat.postMessage", channel=self.channel,
 		                          text=response, as_user=True)
 
 			for d in directions:		
 				response = '%s partners:\n' % d
-				table = [ [ '*Name*','*Skid*'] + [ '*' + str(i) + '*' for i in range(len(skids)) ] ]
+				table = [ [ '*Name*','*Skid*'] + [ '*' + str(i) + '*' for i in range( len( skids ) ) ] ]
 
-				#Order by connectivity strength
-				n_max = { n: max( [ cn[d][n]['skids'][t] for t in cn[d][n]['skids'] ] ) for n in cn[d] }
-				n_order = sorted( [ n for n in cn[d] ], key = lambda x:n_max[x], reverse = True  )
-
-				for n in n_order:
-					if filt and True not in [ t in neuron_names[n].lower() for t in filt ]:
-						continue
-
-					this_line = [ trunc_names[ n ], n ]
-					for s in skids:
-						if s in cn[ d ][n]['skids']:
-							this_line.append( cn[ d ][n]['skids'][s] )
-						else:
-							this_line.append( 0 )
-					table.append( this_line )								
+				if d == 'incoming':				
+					table += cn [ cn.relation == 'upstream' ][ [ 'neuron_name', 'skeleton_id' ] + [ str(s) for s in skids ] ] .as_matrix().tolist()
+				elif d == 'outgoing':								
+					table += cn [ cn.relation == 'downstream' ][ [ 'neuron_name', 'skeleton_id' ]  + [ str(s) for s in skids ] ].as_matrix().tolist()
+												
 				self.slack_client.api_call("chat.postMessage", channel=self.channel, text= response + '```' + tabulate(table) + '```', as_user=True)			
 
 		return ''
@@ -738,11 +757,11 @@ class return_url(threading.Thread):
 			response = 'Please provide neurons as `#skid`, `annotation=" "` or `name=" "`! For example: `@catbot plot-neuron #957684`'
 		else:	
 			response = 'Here are URLs to the neurons you have provided!'
-			skdata = get_3D_skeleton( skids, remote_instance , connector_flag = 0, tag_flag = 0, get_history = False, time_out = None, silent = True , project_id = botconfig.PROJECT_ID)
-			for i, neuron in enumerate(skdata):
-				root = [n for n in neuron[0] if n[1] == None][0]
-				url = remote_instance.url_to_coordinates( botconfig.PROJECT_ID , root[3:6] , stack_id = 8, tool = 'tracingtool' , active_skeleton_id = skids[i], active_node_id = root[0] )
-				response += '\n *#%s*: %s' % ( skids[i], url )
+			skdata = get_3D_skeleton( skids, remote_instance , connector_flag = 0, tag_flag = 0, get_history = False, time_out = None , project_id = botconfig.PROJECT_ID)
+			for neuron in skdata.itertuples():
+				root = [ n for n in neuron.nodes.itertuples() if n.parent_id == None][0]
+				url = remote_instance.url_to_coordinates( botconfig.PROJECT_ID , (root.x,root.y,root.z) , stack_id = 8, tool = 'tracingtool' , active_skeleton_id = neuron.skeleton_id , active_node_id = root.treenode_id )
+				response += '\n *#%s*: %s' % ( neuron.skeleton_id , url )
 
 		if response:
 			self.slack_client.api_call("chat.postMessage", channel=self.channel,
@@ -1059,7 +1078,7 @@ class neurondb_manager(threading.Thread):
 		skids = parse_neurons( self.raw_command )
 
 		if skids:
-			self.neuron_names = retrieve_names( skids, remote_instance )
+			self.neuron_names = get_names( skids, remote_instance )
 
 		try:
 			data = shelve.open('neurondb')			
@@ -1184,10 +1203,10 @@ def parse_neurons( command ):
 		skids += re.findall('#(\d+)', command)
 
 	if 'name="' in command:
-		skids += retrieve_skids_by_name( re.search('name="(.*?)"', command ).group(1), allow_partial = True, remote_instance = remote_instance, project_id = botconfig.PROJECT_ID )
+		skids += get_skids_by_name( re.search('name="(.*?)"', command ).group(1), allow_partial = True, remote_instance = remote_instance, project_id = botconfig.PROJECT_ID )
 
 	if 'annotation="' in command:
-		skids += retrieve_skids_by_annotation( re.search('annotation="(.*?)"', command ).group(1) , remote_instance = remote_instance, project_id = botconfig.PROJECT_ID )
+		skids += get_skids_by_annotation( re.search('annotation="(.*?)"', command ).group(1) , remote_instance = remote_instance, project_id = botconfig.PROJECT_ID )
 
 	return list( set( [ int(n) for n in skids ] ) )
 
@@ -1198,7 +1217,7 @@ if __name__ == '__main__':
 	#Create logger
 	logger = logging.getLogger('pybotLog')	
 	#Create file handler which logs even debug messages
-	fh = logging.FileHandler('pymaid.log')
+	fh = logging.FileHandler('pybot.log')
 	fh.setLevel(logging.DEBUG)
 	#Create console handler - define different log level is desired
 	ch = logging.StreamHandler()
