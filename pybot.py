@@ -32,9 +32,6 @@ from pyzotero import zotero
 from datetime import datetime, date
 from websocket import WebSocketConnectionClosedException
 
-#For debugging only
-import sys
-sys.path.append('/Users/philipps/OneDrive/Cloudbox/Python/PyMaid')
 
 from pymaid.plot import plot2d
 from pymaid.morpho import classify_nodes
