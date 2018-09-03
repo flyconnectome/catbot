@@ -958,6 +958,13 @@ class return_help(threading.Thread):
             response += '1. Add `incoming` or `outgoing` to limit results to up- or downstream partners \n'
             response += '2. Add `filter="tag1,tag2"` to filter results for neuron names (case-insensitive, non-intersecting)\n'
             response += '3. Add `threshold=3` to filter partners for a minimum number of synapses\n'
+        elif 'nblast-fafb' in self.command:
+            response = '`nblast-fafb` blasts the provided neuron against the nightly dump of FAFB neurons. Use combinations of the following optional arguments to refine: \n'
+            response += '1. Use `nblast <neuron> mirror` to mirror neuron before nblasting (if you are looking for the left version of your neuron). \n'
+            response += '2. Use `nblast <neuron> hits=N` to return the top N hits in the 3D plot. Default is 3\n'
+            response += '4. Use `nblast <neuron> cores=N` to set the number of CPU cores used to nblast. Default is 8\n'
+            response += '5. Use `nblast <neuron> prefermu` to sort hits by reverse score (muscore) rather than forward score\n'
+            response += '6. Use `nblast <neuron> usealpha` to make nblast value backbones higher than smaller neurites\n'
         elif 'nblast' in self.command:
             response = '`nblast` blasts the provided neuron against the flycircuit database. Use combinations of the following optional arguments to refine: \n'
             response += '1. Use `nblast <neuron> nomirror` to prevent mirroring of neurons before nblasting (i.e. if cellbody is already on the flys left). \n'
@@ -996,7 +1003,7 @@ class return_help(threading.Thread):
                         '`plot <neurons>` : give me a list of neurons to plot. Use `@catbot help plot` to learn about how to show neuropils.',
                         '`url <neurons>` : give me a list of neurons and I will generate urls to their root nodes.',
                         '`nblast <neuron>` : give me a *single* neuron and let me run an nblast search. Use `@catbot help nblast` to learn more.',
-                        '`nblast-fafb <neuron>` : same as `nblast` but searches against a nightly dump of (simplified) CATMAID neurons.',
+                        '`nblast-fafb <neuron>` : `nblast` against a nightly dump of (simplified) CATMAID neurons. Use `@catbot help nblast-fafb` to learn more.',
                         '`zotero TAG1 TAG2 TAG3` : give me tags and I will search our Zotero group for you',
                         '`zotero file ZOTERO-ID` : give me a Zotero ID and I will download the PDF for you',
                         '`partners <neurons>` : returns synaptic partners. Use `@catbot help partners` to learn more.',
@@ -1488,7 +1495,6 @@ if __name__ == '__main__':
                                                            'admin.',
                                                       as_user=True)
                         elif 'nblast' in command.lower():
-
                             # For some odd reason, threading does not prevent
                             # freezing while waiting R code to return nblast
                             # results.
@@ -1509,8 +1515,6 @@ if __name__ == '__main__':
                                                               text=response,
                                                               as_user=True)
                                 else:
-
-                                    mirror = not 'nomirror' in command
                                     prefermu = 'prefermu' in command
                                     alpha = 'alpha' in command
 
@@ -1532,6 +1536,7 @@ if __name__ == '__main__':
                                         db = 'fc'
 
                                     if 'fafb' in command.lower():
+                                        mirror = 'mirror' in command
                                         p = subprocess.Popen("python3 ffnblast_fafb.py "
                                                              "%s %s %i %i %i "
                                                              "%i %i" % (skids[0],
@@ -1541,6 +1546,7 @@ if __name__ == '__main__':
                                                              int(alpha)),
                                                              shell=True)
                                     else:
+                                        mirror = not 'nomirror' in command
                                         p = subprocess.Popen("python3 ffnblast.py "
                                                              "%s %s %i %i %s %i "
                                                              "%i %i" % (skids[0],
