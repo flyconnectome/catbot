@@ -10,7 +10,7 @@ SERVER_URL = ''
 AUTHTOKEN = ''
 HTTP_USER = ''
 HTTP_PW = ''
-PROJECT_ID = 
+PROJECT_ID =
 
 #Slack credentials
 SLACK_KEY = ''
@@ -21,4 +21,7 @@ ZOT_GRP_ID = ''
 
 #Nblast databases
 FLYCIRCUIT_DB = ''
-JANELIA_GMR_DB = '' 
+JANELIA_GMR_DB = ''
+
+# Folder with FAFB nightly dumps
+FAFB_DUMP = ''
