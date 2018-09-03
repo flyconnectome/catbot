@@ -960,11 +960,11 @@ class return_help(threading.Thread):
             response += '3. Add `threshold=3` to filter partners for a minimum number of synapses\n'
         elif 'nblast-fafb' in self.command:
             response = '`nblast-fafb` blasts the provided neuron against the nightly dump of FAFB neurons. Use combinations of the following optional arguments to refine: \n'
-            response += '1. Use `nblast <neuron> mirror` to mirror neuron before nblasting (if you are looking for the left version of your neuron). \n'
-            response += '2. Use `nblast <neuron> hits=N` to return the top N hits in the 3D plot. Default is 3\n'
-            response += '4. Use `nblast <neuron> cores=N` to set the number of CPU cores used to nblast. Default is 8\n'
-            response += '5. Use `nblast <neuron> prefermu` to sort hits by reverse score (muscore) rather than forward score\n'
-            response += '6. Use `nblast <neuron> usealpha` to make nblast value backbones higher than smaller neurites\n'
+            response += '1. Use `nblast-fafb <neuron> mirror` to mirror neuron before nblasting (if you are looking for the left version of your neuron). \n'
+            response += '2. Use `nblast-fafb <neuron> hits=N` to return the top N hits in the 3D plot. Default is 3\n'
+            response += '4. Use `nblast-fafb <neuron> cores=N` to set the number of CPU cores used to nblast. Default is 8\n'
+            response += '5. Use `nblast-fafb <neuron> prefermu` to sort hits by reverse score (muscore) rather than forward score\n'
+            response += '6. Use `nblast-fafb <neuron> usealpha` to make nblast value backbones higher than smaller neurites\n'
         elif 'nblast' in self.command:
             response = '`nblast` blasts the provided neuron against the flycircuit database. Use combinations of the following optional arguments to refine: \n'
             response += '1. Use `nblast <neuron> nomirror` to prevent mirroring of neurons before nblasting (i.e. if cellbody is already on the flys left). \n'
@@ -1364,7 +1364,7 @@ if __name__ == '__main__':
 
     #botconfig.py holds credentials for CATMAID, Slack and Zotero
     try:
-        import botconfig2 as botconfig
+        import botconfig
     except:
         logger.error('Import of botconfig.py failed. Please make sure you'
                      ' have this configuration file correctly set up!')
