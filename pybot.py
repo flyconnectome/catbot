@@ -1249,15 +1249,18 @@ def time2hh():
     if time2hh.days > 0:
         return "It's {} days, {} hours and {} minutes " \
                "to Happy Hour :(".format(time2hh.days,
-                                         time2hh.seconds//3600,
-                                         (time2hh.seconds//60)%60)
-    elif time2hh.seconds//3600 > 0:
+                                         time2hh.seconds // 3600,
+                                         (time2hh.seconds // 60) % 60)
+    elif time2hh.seconds // 3600 > 0:
         return "It's {} hours and {} minutes to " \
-               "Happy Hour!".format(time2hh.seconds//3600,
-                                   (time2hh.seconds//60)%60)
-    else:
+               "Happy Hour!".format(time2hh.seconds // 3600,
+                                    (time2hh.seconds // 60) % 60)
+    elif time2hh.seconds > 60:
         return "It's only another {} minutes to " \
-               "Happy Hour :)".format((time2hh.seconds//60)%60)
+               "Happy Hour :)".format((time2hh.seconds // 60) % 60)
+    else:
+        return "Oh boy, we're almost there! Give me a {} second " \
+               "countdown!".format(time2hh.seconds)
 
 
 def parse_slack_output(slack_rtm_output, user_list):
