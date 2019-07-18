@@ -37,7 +37,7 @@ import pandas as pd
 
 if __name__ == '__main__':
     import sys
-    import botconfig2 as botconfig
+    import botconfig
 
     # Skid of the neuron to NBLAST and Slack channel to post the response to have to be passed as arguments
     skid = sys.argv[1]

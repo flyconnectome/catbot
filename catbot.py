@@ -411,7 +411,7 @@ if __name__ == '__main__':
 
     # botconfig.py holds credentials for CATMAID, Slack and Zotero
     try:
-        import botconfig2 as botconfig
+        import botconfig
     except BaseException:
         logger.error('Import of botconfig.py failed. Please make sure you'
                      ' have this configuration file correctly set up!')
