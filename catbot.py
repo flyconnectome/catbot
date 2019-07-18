@@ -252,7 +252,7 @@ def parse_message(**payload):
     """Parse message from RTM client start thread for command if necessary."""
     # Now parse data
     data = payload['data']
-    msg = data['text']
+    msg = data.get('text', '')
 
     # If this is not directed at me, ignore it
     if botconfig.AT_BOT not in msg:
