@@ -64,7 +64,7 @@ if __name__ == '__main__':
 
     msg = f'Blasting neuron #{skid} (mirror={mirror}; reverse={reverse}; ' \
           f'hits={hits}; db={db}, use_alpha={use_alpha}; ' \
-          f'prefer_reverse_score={prefer_muscore}) - please wait...'
+          f'prefer_mu_score={prefer_muscore}) - please wait...'
     logger.info(msg)
     ts = web_client.chat_postMessage(channel=channel,
                                      text=msg,
@@ -133,7 +133,7 @@ if __name__ == '__main__':
     plot3d = robjects.r('plot3d')
     writeWebGL = robjects.r('writeWebGL')
 
-    # Summary comes ordered by reverse score (muscore). However, the hits are based solely on forward score
+    # Summary comes ordered by mean score (muscore). However, the hits are based solely on forward score
     # If we prefer muscore, use hit numbers ('n') of the first few entries and then assign new the hit numbers
     if not prefer_muscore:
         h = robjects.IntVector(range(hits + 1))

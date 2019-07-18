@@ -69,7 +69,7 @@ if __name__ == '__main__':
 
     msg = f'Blasting neuron #{skid} (mirror={mirror}; reverse={reverse}; ' \
           f'hits={hits}; use_alpha={use_alpha}; ' \
-          f'prefer_reverse_score={prefer_muscore}) - please wait...'
+          f'prefer_mu_score={prefer_muscore}) - please wait...'
     logger.info(msg)
     ts = web_client.chat_postMessage(channel=channel,
                                      text=msg,
