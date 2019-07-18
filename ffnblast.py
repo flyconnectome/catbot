@@ -105,11 +105,11 @@ if __name__ == '__main__':
 
     if db == 'fc':
         res = nblast_fafb(int(skid), mirror=mirror, reverse=reverse,
-                          db=fcdps, UseAlpha=use_alpha)
+                          db=fcdps, UseAlpha=use_alpha, **{'.progress': False})
         su = summary(res, db=fcdps)
     elif db == 'gmr':
         res = nblast_fafb(int(skid), mirror=mirror, reverse=reverse,
-                          db=gmrdps, UseAlpha=use_alpha)
+                          db=gmrdps, UseAlpha=use_alpha, **{'.progress': False})
         su = summary(res, db=gmrdps)
 
     # Read results into python data objects

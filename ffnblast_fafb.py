@@ -141,6 +141,7 @@ if __name__ == '__main__':
                              nat.neuronlist(xdp),
                              **{'normalised': True,
                                 '.parallel': True,
+                                '.progress': False,
                                 'UseAlpha': use_alpha})
 
         # Have to convert to dataframe to sort them -> using
