@@ -260,11 +260,9 @@ def parse_message(**payload):
 
     # Parse remainder of message
     web_client = payload['web_client']
-    rtm_client = payload['rtm_client']
-    channel = data['user']
-    user_id = data['channel']
+    channel = data['channel']
+    user_id = data['user']
     user_name = user_list[user_id]
-    ts = data['ts']
 
     logger.info(f'Message from {user_name} ({user_id}) in channel {channel}: {msg}')
 
