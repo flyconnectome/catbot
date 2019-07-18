@@ -225,6 +225,8 @@ if __name__ == '__main__':
 
     _ = web_client.files_upload(channels=channel, file='webGL/index.html',
                                 title=f'3D nblast results for neuron #{skid}',
+                                filename='nblast_top_hits.html',
+                                filetype='html',
                                 initial_comment='Open file in browser')
 
     # Color palette is based on R's rainbow() -> we have to strip the last two values (those are alpha)
