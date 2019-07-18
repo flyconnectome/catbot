@@ -130,16 +130,16 @@ class return_help(threading.Thread):
             response += '1. Use `nblast-fafb <neuron> mirror` to mirror neuron before nblasting (if you are looking for the left version of your neuron). \n'
             response += '2. Use `nblast-fafb <neuron> hits=N` to return the top N hits in the 3D plot. Default is 3\n'
             response += '4. Use `nblast-fafb <neuron> cores=N` to set the number of CPU cores used to nblast. Default is 8\n'
-            response += '5. Use `nblast-fafb <neuron> prefermu` to sort hits by reverse score (muscore) rather than forward score\n'
-            response += '6. Use `nblast-fafb <neuron> usealpha` to make nblast value backbones higher than smaller neurites\n'
+            response += '5. Use `nblast-fafb <neuron> prefermu` to sort hits by mean of forward+reverse score rather than just forward score. Highly recommended!\n'
+            response += '6. Use `nblast-fafb <neuron> usealpha` to make nblast emphasise straight backbones over smaller, wrigly neurites\n'
         elif 'nblast' in self.command:
-            response = '`nblast` blasts the provided neuron against the flycircuit database. Use combinations of the following optional arguments to refine: \n'
+            response = '`nblast` blasts the provided neuron against the flycircuit (default) or Janelia GMR database. Use combinations of the following optional arguments to refine: \n'
             response += '1. Use `nblast <neuron> nomirror` to prevent mirroring of neurons before nblasting (i.e. if cellbody is already on the flys left). \n'
             response += '2. Use `nblast <neuron> hits=N` to return the top N hits in the 3D plot. Default is 3\n'
-            response += '3. Use `nblast <neuron> gmrdb` to nblast against Janelia GMR lines  \n'
+            response += '3. Use `nblast <neuron> gmrdb` to nblast against Janelia GMR lines instead of against flycircuit \n'
             response += '4. Use `nblast <neuron> cores=N` to set the number of CPU cores used to nblast. Default is 8\n'
-            response += '5. Use `nblast <neuron> prefermu` to sort hits by reverse score (muscore) rather than forward score\n'
-            response += '6. Use `nblast <neuron> usealpha` to make nblast value backbones higher than smaller neurites\n'
+            response += '5. Use `nblast <neuron> prefermu` to sort hits by mean of forward+reverse score rather than just forward score. Highly recommended!\n'
+            response += '6. Use `nblast <neuron> usealpha` to make nblast emphasise straight backbones over smaller, wrigly neurites\n'
         else:
             functions = [
                         '`url <neurons>` : give me a list of neurons and I will generate urls to their root nodes.',
