@@ -101,7 +101,7 @@ if __name__ == '__main__':
 
     if os.path.isfile(botconfig.FAFB_DUMP):
         _ = robjects.r(f'load("{botconfig.FAFB_DUMP}")')
-        fulln_simp10_dps = robjects.r(os.path.basename(botconfig.FAFB_DUMP))
+        fafb_dps = robjects.r(os.path.basename(botconfig.FAFB_DUMP).replace('.rda', ''))
     else:
         msg = f'Unable to find nightly FAFB dump at {botconfig.FAFB_DUMP}'
         _ = web_client.chat_postMessage(channel=channel,
@@ -134,10 +134,10 @@ if __name__ == '__main__':
 
     # Now NBLAST!
     # Number of reverse scores to calculate (max 100)
-    nrev = min(100, len(fulln_simp10_dps))
+    nrev = min(100, len(fafb_dps))
 
     if reverse:
-        sc = r_nblast.nblast(fulln_simp10_dps,
+        sc = r_nblast.nblast(fafb_dps,
                              nat.neuronlist(xdp),
                              **{'normalised': True,
                                 '.parallel': True,
@@ -153,15 +153,15 @@ if __name__ == '__main__':
         # Use ".rx()" like "[]" and "rx2()" like "[[]]" to extract subsets of R
         # objects
         scr = r_nblast.nblast(nat.neuronlist(xdp),
-                              fulln_simp10_dps.rx(robjects.StrVector(sc_df.name.tolist()[:nrev])),
+                              fafb_dps.rx(robjects.StrVector(sc_df.name.tolist()[:nrev])),
                               **{'normalised': True,
                                  '.parallel': True,
                                  'UseAlpha': use_alpha})
     else:
-        sc = r_nblast.nblast(nat.neuronlist(xdp), fulln_simp10_dps, **
-                             {'normalised': True,
-                              '.parallel': True,
-                              'UseAlpha': use_alpha})
+        sc = r_nblast.nblast(nat.neuronlist(xdp), fafb_dps,
+                             **{'normalised': True,
+                                '.parallel': True,
+                                'UseAlpha': use_alpha})
 
         # Have to convert to dataframe to sort them -> using
         # 'robjects.r("sort")' looses the names for some reason
@@ -171,7 +171,7 @@ if __name__ == '__main__':
 
         # Use ".rx()" like "[]" and "rx2()" like "[[]]" to extract subsets of R
         # objects
-        scr = r_nblast.nblast(fulln_simp10_dps.rx(robjects.StrVector(sc_df.name.tolist()[:nrev])),
+        scr = r_nblast.nblast(fafb_dps.rx(robjects.StrVector(sc_df.name.tolist()[:nrev])),
                               nat.neuronlist(xdp),
                               **{'normalised': True,
                                  '.parallel': True,
@@ -213,7 +213,7 @@ if __name__ == '__main__':
     robjects.r('writeWebGL("webGL", width=1000)')
     robjects.r('rgl.close()')
 
-    logger.debug('Finished nblasting neuron', skid)
+    logger.debug(f'Finished nblasting neuron #{skid}')
 
     # Remove old message
     _ = web_client.chat_delete(channel=channel, ts=ts)
