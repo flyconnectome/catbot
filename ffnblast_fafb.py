@@ -22,10 +22,11 @@
 
 import rpy2.robjects as robjects
 from rpy2.robjects.packages import importr
-import json, logging
-from tabulate import tabulate
-from slackclient import SlackClient
 
+import certifi
+import logging
+import slack
+import ssl as ssl_lib
 import os.path
 
 import pymaid
@@ -36,9 +37,9 @@ import pandas as pd
 
 if __name__ == '__main__':
     import sys
-    import botconfig
+    import botconfig2 as botconfig
 
-    #Skid of the neuron to NBLAST and Slack channel to post the response to have to be passed as arguments
+    # Skid of the neuron to NBLAST and Slack channel to post the response to have to be passed as arguments
     skid = sys.argv[1]
     channel = sys.argv[2]
     mirror = bool(int(sys.argv[3]))
@@ -48,75 +49,66 @@ if __name__ == '__main__':
     use_alpha = bool(int(sys.argv[7]))
     reverse = False
 
-    #Create logger
+    # Create logger
     logger = logging.getLogger('fire-n-forget FAFB NBLAST')
     logger.setLevel(logging.INFO)
-    #Create console handler - define different log level is desired
+    # Create console handler - define different log level is desired
     ch = logging.StreamHandler()
     ch.setLevel(logging.INFO)
-    #Create formatter and add it to the handlers
+    # Create formatter and add it to the handlers
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     ch.setFormatter(formatter)
-    #Add the handlers to the logger
+    # Add the handlers to the logger
     logger.addHandler(ch)
 
-    #Initialize slack client from botconfig.py
-    slack_client = SlackClient(botconfig.SLACK_KEY)
-    logger.debug('Connection to Slack:', slack_client.rtm_connect())
+    # Initialize slack client from botconfig.py
+    ssl_context = ssl_lib.create_default_context(cafile=certifi.where())
+    web_client = slack.WebClient(token=botconfig.BOT_USER_OAUTH_ACCESS_TOKEN,
+                                 ssl=ssl_context)
+    logger.debug('Connection to Slack:', web_client.rtm_connect())
 
-    logger.info('Blasting neuron #%s (mirror=%s; reverse=%s; hits=%i;'
-                ' use_alpha=%s; prefer_reverse_score=%s) - please wait...'
-                '' % (skid, mirror, reverse, hits, use_alpha,
-                      prefer_muscore))
-    ts = slack_client.api_call("chat.postMessage", channel=channel,
-                               text='Blasting neuron #%s `(mirror=%s; '
-                                    'reverse=%s; hits=%i; use_alpha=%s; '
-                                    'prefer_reverse_score=%s)` '
-                                    '- please wait...' % (skid, mirror,
-                                                          reverse, hits,
-                                                          use_alpha,
-                                                          prefer_muscore),
-                               as_user=True)['ts']
+    msg = f'Blasting neuron #{skid} (mirror={mirror}; reverse={reverse}; ' \
+          f'hits={hits}; use_alpha={use_alpha}; ' \
+          f'prefer_reverse_score={prefer_muscore}) - please wait...'
+    logger.info(msg)
+    ts = web_client.chat_postMessage(channel=channel,
+                                     text=msg,
+                                     as_user=True).data['ts']
 
-    #Import R libraries
+    # Import R libraries - they have to be imported despite us not actively using them!
     nat = importr('nat')
     elmr = importr('elmr')
     fc = importr('flycircuit')
     domc = importr('doMC')
     rjson = importr('rjson')
-    cores = robjects.r('registerDoMC(%i)' % cores)
+    cores = robjects.r(f'registerDoMC({cores})')
     vfbr = importr('vfbr')
     catmaid = importr('catmaid')
     nat_flybrains = importr('nat.flybrains')
     nat_templatebrains = importr('nat.templatebrains')
     r_nblast = importr('nat.nblast')
-    rmarkdown = importr('rmarkdown')
 
     # Make connection to Catmaid
-    login = robjects.r('options(catmaid.server="{}", catmaid.authname="{}", '
-                       'catmaid.authpassword="{}", catmaid.token="{}")'.format(botconfig.SERVER_URL,
-                                                                               botconfig.HTTP_USER,
-                                                                               botconfig.HTTP_PW,
-                                                                               botconfig.AUTHTOKEN))
-    rm = pymaid.CatmaidInstance(botconfig.SERVER_URL,
-                                botconfig.HTTP_USER,
-                                botconfig.HTTP_PW,
-                                botconfig.AUTHTOKEN)
+    login = robjects.r(f'options(catmaid.server="{botconfig.CATMAID_SERVER_URL}",'
+                       f'catmaid.authname="{botconfig.CATMAID_HTTP_USER}",'
+                       f'catmaid.authpassword="{botconfig.CATMAID_HTTP_PW}",'
+                       f'catmaid.token="{botconfig.CATMAID_AUTHTOKEN}")')
 
-    # If there already is a DPS file from the nightly dump use this
-    p = os.path.join(botconfig.FAFB_DUMP, 'fulln.simp10.dps.rda')
-    if os.path.isfile(p):
-        _ = robjects.r('load("{}")'.format(p))
-        fulln_simp10_dps = robjects.r('fulln.simp10.dps')
+    rm = pymaid.CatmaidInstance(botconfig.CATMAID_SERVER_URL,
+                                botconfig.CATMAID_HTTP_USER,
+                                botconfig.CATMAID_HTTP_PW,
+                                botconfig.CATMAID_AUTHTOKEN)
+
+    if os.path.isfile(botconfig.FAFB_DUMP):
+        _ = robjects.r(f'load("{botconfig.FAFB_DUMP}")')
+        fulln_simp10_dps = robjects.r(os.path.basename(botconfig.FAFB_DUMP))
     else:
-        # Generate dps (note the conversion to um!)
-        p = os.path.join(botconfig.FAFB_DUMP, 'fulln.simp10.rda')
-        _ = robjects.r('load("{}")'.format(p))
-        fulln_simp10_dps = robjects.r("dotprops(fulln.simp10/1e3, k=5, "
-                                      "resample=1, .parallel=T, "
-                                      "OmitFailures=T)")
+        msg = f'Unable to find nightly FAFB dump at {botconfig.FAFB_DUMP}'
+        _ = web_client.chat_postMessage(channel=channel,
+                                        text=msg,
+                                        as_user=True)
 
-    #Make R functions callable in Python
+    # Make R functions callable in Python
     rainbow = robjects.r('rainbow')
 
     # Load the neuron of interest
@@ -140,8 +132,7 @@ if __name__ == '__main__':
     # Get the neuron into Python
     xdp = robjects.r('n.simp.dps')
 
-    # Now NBLAST
-
+    # Now NBLAST!
     # Number of reverse scores to calculate (max 100)
     nrev = min(100, len(fulln_simp10_dps))
 
@@ -191,16 +182,14 @@ if __name__ == '__main__':
                              sc_df.loc[scr.names[i]].score,
                              scr[i],
                              (sc_df.loc[scr.names[i]].score + scr[i]) / 2]
-                           for i in range(len(scr))],
-                          columns=['skeleton_id', 'forward_score',
-                                   'reverse_score', 'mu_score']
-                          )
+                            for i in range(len(scr))],
+                           columns=['skeleton_id', 'forward_score', 'reverse_score', 'mu_score']
+                           )
 
     if prefer_muscore:
         res = res.sort_values('mu_score', ascending=False)
     else:
         res = res.sort_values('forward_score', ascending=False)
-
 
     names = pymaid.get_names(res.skeleton_id.values)
     res['neuron_name'] = res.skeleton_id.map(names)
@@ -225,21 +214,21 @@ if __name__ == '__main__':
 
     logger.debug('Finished nblasting neuron', skid)
 
-    slack_client.api_call("chat.delete",
-                          channel=channel,
-                          ts=ts)
+    # Remove old message
+    _ = web_client.chat_delete(channel=channel, ts=ts)
 
-    slack_client.api_call("chat.postMessage", channel=channel,
-                          text= '```{}```'.format(res.head(max(10, hits)).to_string()),
-                          as_user=True)
+    res_tbl = '```{}```'.format(res.head(max(10, hits)).to_string())
+    _ = web_client.chat_postMessage(channel=channel,
+                                    text=res_tbl,
+                                    as_user=True)
 
-    with open('webGL/index.html', 'r') as f:
-        slack_client.api_call("files.upload", channels=channel, file=f,
-                             title='3D nblast results for neuron #%s' % skid,
-                             initial_comment='Open file in browser'
-                             )
-    #Color palette is based on R's rainbow() -> we have to strip the last two values (those are alpha)
+    _ = web_client.files_upload(channels=channel, file='webGL/index.html',
+                                title=f'3D nblast results for neuron #{skid}',
+                                initial_comment='Open file in browser')
+
+    # Color palette is based on R's rainbow() -> we have to strip the last two values (those are alpha)
     colors = [e[:-2] for e in list(rainbow(hits))]
-    legend = '\n'.join(list(map(lambda c,n : c + ' - ' + n, colors, hit_names)))
-    slack_client.api_call("chat.postMessage", channel=channel,
-                          text=legend, as_user=True)
+    legend = '\n'.join(list(map(lambda c, n: c + ' - ' + n, colors, hit_names)))
+    _ = web_client.chat_postMessage(channel=channel,
+                                    text=legend,
+                                    as_user=True)

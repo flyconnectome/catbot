@@ -1,73 +1,58 @@
 # catbot
-Python 3 Slack bot to interface with [CATMAID](https://github.com/catmaid/CATMAID) server, [NBLAST](https://github.com/jefferislab/nat.nblast) and [Zotero](https://www.zotero.org/). Based on [Slack's Python API](https://github.com/slackapi/python-slackclient) (see [here](https://slackapi.github.io/python-slackclient/) for documentation).
+Python (>=3.6) Slack bot to interface [CATMAID](https://github.com/catmaid/CATMAID)
+with [NBLAST](https://github.com/jefferislab/nat.nblast). Based on
+[Slack's Python API](https://github.com/slackapi/python-slackclient) (see [here](https://slackapi.github.io/python-slackclient/) for documentation).
 
-# Quickstart 
-1. Download catbot.py, botconfig.py and ffnblast.py
-2. Setup and configure botconfig.py (see below)
-3. Install dependencies
-4. Run catbot.py
+# Quickstart
+1. Clone this repository
+2. Complete the botconfig.py (see below)
+3. Install dependencies for R and Python
+4. Run catbot.py: `python3 catbot.py`
 5. In Slack use `@catbot help` to get a list of possible commands
 
-# Dependencies 
+# Dependencies
 ## Python
-[slack_client](https://github.com/slackapi/python-slackclient),
+[slackclient](https://github.com/slackapi/python-slackclient),
 [matplotlib](http://matplotlib.org/),
 [pymaid](https://github.com/schlegelp/pymaid),
 [tabulate](https://github.com/gregbanks/python-tabulate),
 [rpy2](https://rpy2.readthedocs.io/en/version_2.8.x/),
-[pyzotero](https://github.com/urschrei/pyzotero)
+[certifi](https://pypi.org/project/certifi/)
 
 ## R
-[elmr](https://github.com/jefferis/elmr),
+[elmr](https://github.com/jefferis/elmr) and dependencies,
 [flycircuit](https://github.com/jefferis/flycircuit),
 [vfbr](https://github.com/jefferis/vfbr),
 [doMC](https://cran.r-project.org/web/packages/doMC/index.html)
+[rjson](https://cran.r-project.org/web/packages/rjson/index.html)
 
 # Configuration
-botconfig.py needs to hold credentials for CATMAID server, Slack and Zotero (optional)
-```python
-#General parameters
-BOT_NAME = 'catbot'
-BOT_ID = ''
-AT_BOT = '<@' + BOT_ID + '>'
-READ_WEBSOCKET_DELAY = 1 # 1 second delay between reading from firehose
-MAX_PARALLEL_REQUESTS = 10 # not more than 10 threads at any given time
+botconfig.py needs to hold credentials for Slack and your CATMAID server:
 
-#Catmaid credentials
-SERVER_URL = ''
-AUTHTOKEN = ''
-HTTP_USER = ''
-HTTP_PW = ''
+`BOT_NAME` is the name of your bot (e.g. "catbot").
 
-#Slack credentials
-SLACK_KEY = ''
+`BOT_USER_OAUTH_ACCESS_TOKEN` is your bot's OAuth token.
 
-#Zotero credentials
-ZOT_KEY = ''
-ZOT_GRP_ID = ''
+See [here](https://api.slack.com/bot-users) on how to setup your bot and retrieve the AUTHTOKEN.
 
-#Nblast databases
-FLYCIRCUIT_DB = 'url to dpscanon.rds'
-JANELIA_GMR_DB = 'url to gmrdps.rds' 
-```
-See [here](https://api.slack.com/bot-users) on how to setup bot_id and Slack key 
+`MAX_PARALLEL_REQUESTS` sets the max number of parallel requests the bot will process before complaining.
 
-See [here](https://github.com/urschrei/pyzotero) on Zotero keys and grp ids.
+`CATMAID_SERVER_URL`, `CATMAID_AUTHTOKEN`, `CATMAID_HTTP_USER`, `CATMAID_HTTP_PW` and `CATMAID_PROJECT_ID` are your CATMAID credentials.
+
+See [here](https://catmaid.readthedocs.io/en/stable/api.html#api-token) how to retrieve your API token.
+
+`FLYCIRCUIT_DB` and `JANELIA_GMR_DB` are the URLs to the respective databases for nblast.
+
+`FAFB_DUMP` is the path to the file that contains the overnight neuron dump.
 
 # Using catbot to NBLAST
-Use `@catbot nblast #skid` to have catbot perform a nblast search. This relies on R being installed and configured to use [elmr](https://github.com/jefferis/elmr) and its dependencies. Please make sure that you can run e.g. the example in `?nblast_fafb`
+Use `@catbot nblast #skid` to have catbot perform a nblast search. This relies on R being installed and setup to use [elmr](https://github.com/jefferis/elmr) and its dependencies. Please make sure that you can run e.g. the example in `?elmr::nblast_fafb`
 
 Catbot will return a list of top hits and their nblast scores plus a .html file containing a WebGL rendering of the first few hits (see screenshot).
 
 ![nblast_example](https://cloud.githubusercontent.com/assets/7161148/23308336/ce5682be-faa2-11e6-9400-6bdb369f1b15.png)
 
 <img src="https://cloud.githubusercontent.com/assets/7161148/23557599/76695c44-0028-11e7-94dd-a9bd6edbb746.png" alt="nblast_webGL_result" width="500">
-
-Optional arguments:
-
-`nomirror` to set mirror=F (default = T)
-
-`hits=N` to set number of hits to include in the 3D WebGL file (default = 3)
 
 ## License:
 This code is under GNU GPL V3
