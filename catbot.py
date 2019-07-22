@@ -210,7 +210,7 @@ def parse_neurons(command):
     if 'name="' in command:
         skids += pymaid.get_skids_by_name(re.search('name="(.*?)"', command).group(1),
                                           allow_partial=True,
-                                          remote_instance=remote_instance)
+                                          remote_instance=remote_instance).skeleton_id.tolist()
 
     if 'annotation="' in command:
         skids += pymaid.get_skids_by_annotation(re.search('annotation="(.*?)"',
