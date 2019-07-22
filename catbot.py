@@ -31,10 +31,47 @@ import subprocess
 import threading
 
 from datetime import datetime, date, timedelta
+from functools import wraps
 
 import pymaid
 
 import slack
+
+
+def respond_error(function):
+    """Run function in try context and respond with error msg if exception."""
+    @wraps(function)
+    def wrapper(*args, **kwargs):
+        # Execute function
+        try:
+            res = function(*args, **kwargs)
+        except BaseException as e:
+            # Now parse data
+            data = kwargs.get('data', {})
+            msg = data.get('text', '')
+
+            # If this is not directed at me, ignore it
+            if botconfig.AT_BOT not in msg:
+                return
+
+            # Parse remainder of message
+            web_client = kwargs.get('web_client')
+            channel = data.get('channel')
+            user_id = data.get('user')
+            user_name = user_list[user_id]
+
+            logger.error(f'Error in command "{msg}" from user {user_name} '
+                         f'({user_id}) in channel {channel}:')
+            logger.error(e, exc_info=True)
+
+            resp = "Ooops - something went wrong! Please let one of my admins" \
+                   " know if this keeps happening!"
+            _ = web_client.chat_postMessage(text=resp,
+                                            channel=channel,
+                                            as_user=True)
+        # Return result
+        return res
+    return wrapper
 
 
 class return_url(threading.Thread):
@@ -248,6 +285,7 @@ class UserList:
 
 
 @slack.RTMClient.run_on(event='message')
+@respond_error
 def parse_message(**payload):
     """Parse message from RTM client start thread for command if necessary."""
     # Now parse data
