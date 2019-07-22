@@ -216,7 +216,7 @@ if __name__ == '__main__':
                                 title=f'3D nblast results for neuron #{skid}',
                                 filename='nblast_top_hits.html',
                                 filetype='html',
-                                initial_comment='Open file in browser')
+                                initial_comment='Open file in browser. You might have to rename from .txt to .html after download.')
 
     # Color palette is based on R's rainbow() -> we have to strip the last two values (those are alpha)
     colors = [e[:-2] for e in list(rainbow(hits))]
