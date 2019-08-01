@@ -479,7 +479,8 @@ if __name__ == '__main__':
     web_client = slack.WebClient(token=botconfig.BOT_USER_OAUTH_ACCESS_TOKEN,
                                  ssl=ssl_context)
     rtm_client = slack.RTMClient(token=botconfig.BOT_USER_OAUTH_ACCESS_TOKEN,
-                                 ssl=ssl_context)
+                                 ssl=ssl_context,
+                                 timeout=300)
     logger.info("Pybot connected and running!")
 
     # Initialize more stuff
