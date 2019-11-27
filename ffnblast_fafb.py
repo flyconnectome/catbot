@@ -126,7 +126,7 @@ if __name__ == '__main__':
         _ = robjects.r('n = xform_brain(n.mirrored, sample=JFRC2, reference=FAFB14)')
 
     # Simplify neuron to same degree as FAFB dump
-    _ = robjects.r('n.simp = simplify_neuron(n[[1]], n=10, OmitFailures=T, .parallel=T)')
+    _ = robjects.r('n.simp = prune_twigs(n[[1]], twig_length=5000, OmitFailures=T, .parallel=T)')
 
     # Convert to dotprops (also note the conversion to um!)
     _ = robjects.r('n.simp.dps = dotprops(n.simp/1e3, k=5, resample=1, .parallel=T, OmitFailures=T)')
