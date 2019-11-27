@@ -10,6 +10,9 @@ CATMAID_HTTP_USER = ''
 CATMAID_HTTP_PW = ''
 CATMAID_PROJECT_ID = 1
 
+# Autoseg URL (we are assuming same credentials + project ID)
+AUTOSEG_SERVER_URL = ''
+
 # Nblast databases
 R_FLYCIRCUIT_DB = ''
 R_JANELIA_GMR_DB = ''

@@ -47,6 +47,7 @@ if __name__ == '__main__':
     cores = int(sys.argv[5])
     prefer_muscore = bool(int(sys.argv[6]))
     use_alpha = bool(int(sys.argv[7]))
+    autoseg = bool(int(sys.argv[8]))
     reverse = False
 
     # Create logger
@@ -94,7 +95,8 @@ if __name__ == '__main__':
                        f'catmaid.authpassword="{botconfig.CATMAID_HTTP_PW}",'
                        f'catmaid.token="{botconfig.CATMAID_AUTHTOKEN}")')
 
-    rm = pymaid.CatmaidInstance(botconfig.CATMAID_SERVER_URL,
+    url = botconfig.AUTOSEG_SERVER_URL if autoseg else botconfig.CATMAID_SERVER_URL
+    rm = pymaid.CatmaidInstance(url,
                                 botconfig.CATMAID_HTTP_USER,
                                 botconfig.CATMAID_HTTP_PW,
                                 botconfig.CATMAID_AUTHTOKEN)

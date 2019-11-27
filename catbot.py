@@ -166,9 +166,10 @@ class return_help(threading.Thread):
             response = '`nblast-fafb` blasts the provided neuron against the nightly dump of FAFB neurons. Use combinations of the following optional arguments to refine: \n'
             response += '1. Use `nblast-fafb <neuron> mirror` to mirror neuron before nblasting (if you are looking for the left version of your neuron). \n'
             response += '2. Use `nblast-fafb <neuron> hits=N` to return the top N hits in the 3D plot. Default is 3\n'
-            response += '4. Use `nblast-fafb <neuron> cores=N` to set the number of CPU cores used to nblast. Default is 8\n'
-            response += '5. Use `nblast-fafb <neuron> prefermu` to sort hits by mean of forward+reverse score rather than just forward score. Highly recommended!\n'
-            response += '6. Use `nblast-fafb <neuron> usealpha` to make nblast emphasise straight backbones over smaller, wrigly neurites\n'
+            response += '3. Use `nblast-fafb <neuron> cores=N` to set the number of CPU cores used to nblast. Default is 8\n'
+            response += '4. Use `nblast-fafb <neuron> prefermu` to sort hits by mean of forward+reverse score rather than just forward score. Highly recommended!\n'
+            response += '5. Use `nblast-fafb <neuron> usealpha` to make nblast emphasise straight backbones over smaller, wrigly neurites\n'
+            response += '6. Use `nblast-fafb <neuron> autoseg` if your query neuron is in the FAFB autoseg instance\n'
         elif 'nblast' in self.command:
             response = '`nblast` blasts the provided neuron against the flycircuit (default) or Janelia GMR database. Use combinations of the following optional arguments to refine: \n'
             response += '1. Use `nblast <neuron> nomirror` to prevent mirroring of neurons before nblasting (i.e. if cellbody is already on the flys left). \n'
@@ -177,6 +178,7 @@ class return_help(threading.Thread):
             response += '4. Use `nblast <neuron> cores=N` to set the number of CPU cores used to nblast. Default is 8\n'
             response += '5. Use `nblast <neuron> prefermu` to sort hits by mean of forward+reverse score rather than just forward score. Highly recommended!\n'
             response += '6. Use `nblast <neuron> usealpha` to make nblast emphasise straight backbones over smaller, wrigly neurites\n'
+            response += '7. Use `nblast <neuron> autoseg` if your query neuron is in the FAFB autoseg instance\n'
         else:
             functions = [
                         '`url <neurons>` : give me a list of neurons and I will generate urls to their root nodes.',
@@ -353,7 +355,13 @@ def parse_message(**payload):
 
         skid = skids[0]
 
-        if not pymaid.neuron_exists(skid, remote_instance=remote_instance):
+        autoseg = 'autoseg' in command.lower()
+        if autoseg:
+            rm = autoseg_instance
+        else:
+            rm = remote_instance
+
+        if not pymaid.neuron_exists(skid, remote_instance=rm):
             resp = f"I'm sorry - the neuron {skid} does not " \
                     "seem to exists."
             _ = web_client.chat_postMessage(text=resp,
@@ -385,11 +393,12 @@ def parse_message(**payload):
         if 'fafb' in command.lower():
             mirror = 'mirror' in command.lower()
             cmd = f'python3 ffnblast_fafb.py {skid} {channel} {int(mirror)} ' \
-                  f'{hits} {cores} {int(prefermu)} {int(alpha)}'
+                  f'{hits} {cores} {int(prefermu)} {int(alpha)} {int(autoseg)}'
         else:
             mirror = 'nomirror' not in command
             cmd = f'python3 ffnblast.py {skid} {channel} {int(mirror)} ' \
-                  f'{hits} {db} {cores} {int(prefermu)} {int(alpha)}'
+                  f'{hits} {db} {cores} {int(prefermu)} {int(alpha)} ' \
+                  '{int(autoseg)}'
 
         p = subprocess.Popen(cmd, shell=True)
         open_processes.append(p)
@@ -460,6 +469,13 @@ if __name__ == '__main__':
                                              botconfig.CATMAID_AUTHTOKEN,
                                              project_id=botconfig.CATMAID_PROJECT_ID,
                                              caching=False)
+
+    autoseg_instance = pymaid.CatmaidInstance(botconfig.AUTOSEG_SERVER_URL,
+                                              botconfig.CATMAID_HTTP_USER,
+                                              botconfig.CATMAID_HTTP_PW,
+                                              botconfig.CATMAID_AUTHTOKEN,
+                                              project_id=botconfig.CATMAID_PROJECT_ID,
+                                              caching=False)
 
     # Set loggers and progress bars
     pymaid.set_pbars(hide=True)

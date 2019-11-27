@@ -42,6 +42,7 @@ if __name__ == '__main__':
     cores = int(sys.argv[6])
     prefer_muscore = bool(int(sys.argv[7]))
     use_alpha = bool(int(sys.argv[8]))
+    autoseg = bool(int(sys.argv[9]))
     reverse = False
 
     # Create logger
@@ -79,7 +80,8 @@ if __name__ == '__main__':
     vfbr = importr('vfbr')
 
     # Make sure variables for databases are set correctly
-    login = robjects.r(f'options(catmaid.server="{botconfig.CATMAID_SERVER_URL}", '
+    url = botconfig.AUTOSEG_SERVER_URL if autoseg else botconfig.CATMAID_SERVER_URL
+    login = robjects.r(f'options(catmaid.server="{url}", '
                        f'catmaid.authname="{botconfig.CATMAID_HTTP_USER}", '
                        f'catmaid.authpassword="{botconfig.CATMAID_HTTP_PW}", '
                        f'catmaid.token="{botconfig.CATMAID_AUTHTOKEN}")')
