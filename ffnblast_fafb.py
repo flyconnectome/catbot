@@ -95,6 +95,7 @@ if __name__ == '__main__':
                        f'catmaid.authname="{botconfig.CATMAID_HTTP_USER}",'
                        f'catmaid.authpassword="{botconfig.CATMAID_HTTP_PW}",'
                        f'catmaid.token="{botconfig.CATMAID_AUTHTOKEN}")')
+    _ = robjects.r('catmaid_login')
 
     rm = pymaid.CatmaidInstance(url,
                                 botconfig.CATMAID_HTTP_USER,
