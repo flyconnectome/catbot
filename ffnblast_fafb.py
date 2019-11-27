@@ -90,12 +90,12 @@ if __name__ == '__main__':
     r_nblast = importr('nat.nblast')
 
     # Make connection to Catmaid
-    login = robjects.r(f'options(catmaid.server="{botconfig.CATMAID_SERVER_URL}",'
+    url = botconfig.AUTOSEG_SERVER_URL if autoseg else botconfig.CATMAID_SERVER_URL
+    login = robjects.r(f'options(catmaid.server="{url}",'
                        f'catmaid.authname="{botconfig.CATMAID_HTTP_USER}",'
                        f'catmaid.authpassword="{botconfig.CATMAID_HTTP_PW}",'
                        f'catmaid.token="{botconfig.CATMAID_AUTHTOKEN}")')
 
-    url = botconfig.AUTOSEG_SERVER_URL if autoseg else botconfig.CATMAID_SERVER_URL
     rm = pymaid.CatmaidInstance(url,
                                 botconfig.CATMAID_HTTP_USER,
                                 botconfig.CATMAID_HTTP_PW,
