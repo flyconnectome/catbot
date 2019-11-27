@@ -69,7 +69,7 @@ if __name__ == '__main__':
     logger.debug('Connection to Slack:', web_client.rtm_connect())
 
     msg = f'Blasting neuron #{skid} (mirror={mirror}; reverse={reverse}; ' \
-          f'hits={hits}; use_alpha={use_alpha}; ' \
+          f'hits={hits}; use_alpha={use_alpha}; autoseg={autoseg}; ' \
           f'prefer_mu_score={prefer_muscore}) - please wait...'
     logger.info(msg)
     ts = web_client.chat_postMessage(channel=channel,
