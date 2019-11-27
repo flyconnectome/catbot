@@ -91,11 +91,11 @@ if __name__ == '__main__':
 
     # Make connection to Catmaid
     url = botconfig.AUTOSEG_SERVER_URL if autoseg else botconfig.CATMAID_SERVER_URL
-    login = robjects.r(f'options(catmaid.server="{url}",'
-                       f'catmaid.authname="{botconfig.CATMAID_HTTP_USER}",'
-                       f'catmaid.authpassword="{botconfig.CATMAID_HTTP_PW}",'
-                       f'catmaid.token="{botconfig.CATMAID_AUTHTOKEN}")')
-    _ = robjects.r('catmaid_login')
+    login = robjects.r(f'catmaid_login(server="{url}",'
+                       f'authname="{botconfig.CATMAID_HTTP_USER}",'
+                       f'authpassword="{botconfig.CATMAID_HTTP_PW}",'
+                       f'token="{botconfig.CATMAID_AUTHTOKEN}",'
+                       'Force=T)')
 
     rm = pymaid.CatmaidInstance(url,
                                 botconfig.CATMAID_HTTP_USER,

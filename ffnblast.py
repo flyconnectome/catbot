@@ -81,10 +81,11 @@ if __name__ == '__main__':
 
     # Make sure variables for databases are set correctly
     url = botconfig.AUTOSEG_SERVER_URL if autoseg else botconfig.CATMAID_SERVER_URL
-    login = robjects.r(f'options(catmaid.server="{url}", '
-                       f'catmaid.authname="{botconfig.CATMAID_HTTP_USER}", '
-                       f'catmaid.authpassword="{botconfig.CATMAID_HTTP_PW}", '
-                       f'catmaid.token="{botconfig.CATMAID_AUTHTOKEN}")')
+    login = robjects.r(f'catmaid_login(server="{url}",'
+                       f'authname="{botconfig.CATMAID_HTTP_USER}",'
+                       f'authpassword="{botconfig.CATMAID_HTTP_PW}",'
+                       f'token="{botconfig.CATMAID_AUTHTOKEN}",'
+                       'Force=T)')
     fcdps = robjects.r(f'fcdps<-read.neuronlistfh("{botconfig.R_FLYCIRCUIT_DB}", localdir=getOption("flycircuit.datadir"))')
     gmrdps = robjects.r(f'gmrdps<-read.neuronlistfh("{botconfig.R_JANELIA_GMR_DB}", localdir=getOption("flycircuit.datadir"))')
     # robjects.r('remotesync(dps,download.missing = TRUE)')
