@@ -398,7 +398,7 @@ def parse_message(**payload):
             mirror = 'nomirror' not in command
             cmd = f'python3 ffnblast.py {skid} {channel} {int(mirror)} ' \
                   f'{hits} {db} {cores} {int(prefermu)} {int(alpha)} ' \
-                  '{int(autoseg)}'
+                  f'{int(autoseg)}'
 
         p = subprocess.Popen(cmd, shell=True)
         open_processes.append(p)
